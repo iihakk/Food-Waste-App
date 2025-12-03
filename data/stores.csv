@@ -1,0 +1,11 @@
+store_id,store_name,branch,average_bags_at_9AM,average_overall_rating,price,longitude,latitude
+100,TBS,Zamalek,18,3.4,42.91,31.2194,30.0626
+101,Dunkin,New Cairo,21,4.1,41.94,31.4913,30.0171
+102,Costa Coffee,Maadi,22,3.2,39.14,31.2625,29.9602
+103,Starbucks,Heliopolis,27,4.5,32.95,31.3375,30.0911
+104,Paul,Mohandessin,8,4.4,50.55,31.2001,30.0561
+105,TBS,New Cairo,10,3.6,54.43,31.4701,30.0285
+106,Cilantro,Zamalek,17,4.3,38.5,31.2243,30.0651
+107,Beano's,Maadi,12,4.2,40.77,31.2587,29.9711
+108,Harris Cafe,Heliopolis,14,4.5,72.16,31.3421,30.0875
+109,Dunkin,Mohandessin,5,4.3,66.09,31.2056,30.0512
