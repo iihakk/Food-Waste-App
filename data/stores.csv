@@ -9,3 +9,20 @@ store_id,store_name,branch,average_bags_at_9AM,average_overall_rating,price,long
 107,Beano's,Maadi,12,4.2,40.77,31.2587,29.9711
 108,Harris Cafe,Heliopolis,14,4.5,72.16,31.3421,30.0875
 109,Dunkin,Mohandessin,5,4.3,66.09,31.2056,30.0512
+110,La Poire,Heliopolis,25,4.6,55.00,31.3412,30.0891
+111,La Poire,Zamalek,20,4.5,58.00,31.2231,30.0638
+112,La Poire,Maadi,18,4.4,52.00,31.2598,29.9685
+113,El Abd,Downtown,30,4.2,35.00,31.2389,30.0456
+114,El Abd,Maadi,22,4.0,38.00,31.2612,29.9623
+115,Mandarine Koueider,Zamalek,15,4.7,65.00,31.2218,30.0612
+116,Mandarine Koueider,Heliopolis,12,4.6,62.00,31.3398,30.0856
+117,Etoile,Heliopolis,20,4.3,48.00,31.3356,30.0878
+118,Etoile,Maadi,16,4.2,45.00,31.2645,29.9645
+119,Simonds,Zamalek,14,4.1,42.00,31.2267,30.0589
+120,Simonds,New Cairo,18,4.0,40.00,31.4823,30.0234
+121,Dukes,Mohandessin,12,3.9,38.00,31.2034,30.0534
+122,Dukes,Maadi,10,3.8,36.00,31.2567,29.9678
+123,Nola Cupcakes,Zamalek,8,4.4,55.00,31.2189,30.0667
+124,Nola Cupcakes,New Cairo,10,4.3,52.00,31.4756,30.0198
+125,Patchi,Heliopolis,6,4.5,85.00,31.3389,30.0912
+126,Patchi,Maadi,5,4.4,82.00,31.2634,29.9634

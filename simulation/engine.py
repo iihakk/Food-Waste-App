@@ -1,51 +1,136 @@
+"""
+Simulation Engine for Food Waste Reduction Platform
+
+This module contains the core simulation logic that models:
+- Daily operations of stores listing surprise bags
+- Customer behavior and purchasing decisions
+- Tracking of KPIs (sold, canceled, wasted bags, revenue, etc.)
+
+The simulation follows this daily cycle:
+1. Morning: Each store sets available bags (with random variation from average)
+2. Throughout day: Customers arrive and see n stores based on ranking algorithm
+3. Customer decision: Pick best store from displayed options (based on valuation)
+4. End of day: Calculate sold, canceled, wasted bags and revenue
+
+Key assumptions:
+- Each customer buys exactly 1 surprise bag
+- Customers only see n stores (not all) - this is the key constraint
+- If a customer's preferred stores have no bags, they leave the system
+- Stores estimate bags at 9AM but actual availability varies (±30%)
+
+Surprise Bag Model:
+- Stores have X items worth of food to distribute
+- If N customers order, each bag contains X/N items worth of food
+- Example: 10 items, 3 customers -> each bag has ~3.3 items worth
+- If 0 customers, all food is wasted
+- Revenue = N * bag_price (customers pay per bag, not per item)
+"""
+
 import numpy as np
 import random
 from collections import defaultdict
 
+
 class SimulationEngine:
+    """
+    Core simulation engine for the food waste reduction marketplace.
+
+    Attributes:
+        stores (DataFrame): Store data (id, name, branch, bags, rating, price, location)
+        customers (DataFrame): Customer data (id, location, valuations for each store)
+        seed (int): Random seed for reproducibility
+    """
+
     def __init__(self, stores_df, customers_df, seed=42):
+        """
+        Initialize the simulation engine.
+
+        Args:
+            stores_df (DataFrame): Store information
+            customers_df (DataFrame): Customer information with store valuations
+            seed (int): Random seed for reproducible results (default: 42)
+        """
         self.stores = stores_df.copy()
         self.customers = customers_df.copy()
         self.seed = seed
 
     def run(self, num_days, n_stores, ranking_func, shopping_probability=0.7):
+        """
+        Run the simulation for a specified number of days.
+
+        In the surprise bag model:
+        - Each store has X "bag equivalents" of food items
+        - Each customer who orders gets 1 bag
+        - If N customers order, they share all X items (each bag has X/N items)
+        - If 0 customers order, all items are wasted
+
+        Args:
+            num_days (int): Number of days to simulate
+            n_stores (int): Number of stores shown to each customer
+            ranking_func (callable): Algorithm that selects which stores to display
+                                     Signature: func(stores_df, n, current_bags) -> list[store_id]
+            shopping_probability (float): Probability a customer shops on any day (0.0-1.0)
+
+        Returns:
+            dict: Results containing:
+                - store_stats: Per-store metrics
+                - daily_data: Day-by-day breakdown
+                - store_exposures: How many times each store was shown
+                - total_customers: Total customer visits
+                - customers_left: Customers who left without buying
+                - summary: Aggregated KPIs
+        """
         random.seed(self.seed)
         np.random.seed(self.seed)
 
         store_ids = self.stores['store_id'].tolist()
-        valuation_cols = [c for c in self.customers.columns if '_valuation' in c]
 
-        # tracking
-        stats = {sid: {'sold': 0, 'canceled': 0, 'wasted': 0, 'revenue': 0, 'lost_revenue': 0}
-                 for sid in store_ids}
+        # Initialize tracking dictionaries
+        stats = {sid: {
+            'bags_sold': 0,        # Number of bags sold (= number of customers)
+            'items_available': 0,  # Total items available across all days
+            'items_distributed': 0, # Items that went to customers
+            'items_wasted': 0,     # Items wasted (when 0 customers)
+            'revenue': 0,
+            'potential_revenue': 0, # Revenue if all items sold individually
+            'avg_items_per_bag': 0, # Average items per bag (value for customer)
+        } for sid in store_ids}
+
         store_exposures = defaultdict(int)
         total_customers = 0
         customers_left = 0
         daily_data = []
 
         for day in range(1, num_days + 1):
-            # morning: setup daily bags and prices
-            daily_bags = {}
+            # ==================== MORNING PHASE ====================
+            # Each store sets their available items for the day
+            # "average_bags_at_9AM" represents item equivalents
+            daily_items = {}
             daily_prices = {}
             for _, store in self.stores.iterrows():
                 sid = store['store_id']
-                est = store['average_bags_at_9AM']
-                daily_bags[sid] = max(1, int(est * np.random.uniform(0.7, 1.3)))
-                daily_prices[sid] = round(random.uniform(25.0, 75.0), 2)
+                estimated = store['average_bags_at_9AM']
+                # Add random variation (±30%)
+                daily_items[sid] = max(1, int(estimated * np.random.uniform(0.7, 1.3)))
+                daily_prices[sid] = store['price']
 
-            current_bags = daily_bags.copy()
-            demand = defaultdict(int)
+            # Track remaining items (for ranking algorithm visibility)
+            current_items = daily_items.copy()
+            # Track customers per store
+            customers_per_store = defaultdict(int)
             day_customers_left = 0
 
-            # customer arrivals
+            # ==================== CUSTOMER ARRIVAL PHASE ====================
             for _, cust in self.customers.iterrows():
                 if random.random() > shopping_probability:
                     continue
 
                 total_customers += 1
 
-                # get displayed stores from ranking algorithm
-                displayed = ranking_func(self.stores, n_stores, current_bags)
+                # Get stores to display using ranking algorithm
+                displayed = ranking_func(self.stores, n_stores, current_items)
+
+                # Track exposures
                 for sid in displayed:
                     store_exposures[sid] += 1
 
@@ -54,7 +139,7 @@ class SimulationEngine:
                     day_customers_left += 1
                     continue
 
-                # customer picks from displayed stores based on valuation
+                # Customer picks best store from displayed options
                 best_store = None
                 best_val = 0
                 for sid in displayed:
@@ -65,36 +150,57 @@ class SimulationEngine:
                             best_val = val
                             best_store = sid
 
-                if best_store and current_bags.get(best_store, 0) > 0:
-                    demand[best_store] += 1
-                    current_bags[best_store] -= 1
+                # Customer orders from preferred store
+                if best_store and current_items.get(best_store, 0) > 0:
+                    customers_per_store[best_store] += 1
+                    # Decrement by 1 to signal "one less bag worth available"
+                    current_items[best_store] -= 1
                 else:
                     customers_left += 1
                     day_customers_left += 1
 
-            # end of day calculations
+            # ==================== END OF DAY PHASE ====================
+            # Calculate results using surprise bag model
             day_stats = {}
             for sid in store_ids:
-                actual = daily_bags[sid]
-                d = demand[sid]
+                items_available = daily_items[sid]
+                num_customers = customers_per_store[sid]
                 price = daily_prices[sid]
 
-                sold = min(actual, d)
-                canceled = max(0, d - actual)
-                wasted = max(0, actual - d)
-                rev = sold * price
-                lost = wasted * price
+                if num_customers > 0:
+                    # Customers share all available items
+                    bags_sold = num_customers
+                    items_distributed = items_available  # All items go to customers
+                    items_wasted = 0
+                    items_per_bag = items_available / num_customers
+                    revenue = num_customers * price  # Pay per bag
+                else:
+                    # No customers = all items wasted
+                    bags_sold = 0
+                    items_distributed = 0
+                    items_wasted = items_available
+                    items_per_bag = 0
+                    revenue = 0
 
-                stats[sid]['sold'] += sold
-                stats[sid]['canceled'] += canceled
-                stats[sid]['wasted'] += wasted
-                stats[sid]['revenue'] += rev
-                stats[sid]['lost_revenue'] += lost
+                potential_revenue = items_available * price
+
+                # Update cumulative stats
+                stats[sid]['bags_sold'] += bags_sold
+                stats[sid]['items_available'] += items_available
+                stats[sid]['items_distributed'] += items_distributed
+                stats[sid]['items_wasted'] += items_wasted
+                stats[sid]['revenue'] += revenue
+                stats[sid]['potential_revenue'] += potential_revenue
 
                 day_stats[sid] = {
-                    'sold': sold, 'canceled': canceled, 'wasted': wasted,
-                    'revenue': rev, 'lost_revenue': lost, 'price': price,
-                    'actual_bags': actual, 'demand': d
+                    'bags_sold': bags_sold,
+                    'items_available': items_available,
+                    'items_distributed': items_distributed,
+                    'items_wasted': items_wasted,
+                    'items_per_bag': round(items_per_bag, 2),
+                    'revenue': revenue,
+                    'price': price,
+                    'num_customers': num_customers
                 }
 
             daily_data.append({
@@ -103,7 +209,13 @@ class SimulationEngine:
                 'customers_left': day_customers_left
             })
 
-        # compile results
+        # Calculate average items per bag for each store
+        for sid in store_ids:
+            if stats[sid]['bags_sold'] > 0:
+                stats[sid]['avg_items_per_bag'] = round(
+                    stats[sid]['items_distributed'] / stats[sid]['bags_sold'], 2
+                )
+
         results = {
             'store_stats': stats,
             'daily_data': daily_data,
@@ -115,27 +227,42 @@ class SimulationEngine:
         return results
 
     def _compute_summary(self, stats, exposures, total_cust, left):
-        total_sold = sum(s['sold'] for s in stats.values())
-        total_canceled = sum(s['canceled'] for s in stats.values())
-        total_wasted = sum(s['wasted'] for s in stats.values())
+        """
+        Compute aggregated KPIs from simulation results.
+
+        Returns:
+            dict: Summary metrics
+        """
+        total_bags_sold = sum(s['bags_sold'] for s in stats.values())
+        total_items_available = sum(s['items_available'] for s in stats.values())
+        total_items_distributed = sum(s['items_distributed'] for s in stats.values())
+        total_items_wasted = sum(s['items_wasted'] for s in stats.values())
         total_revenue = sum(s['revenue'] for s in stats.values())
-        total_lost = sum(s['lost_revenue'] for s in stats.values())
+        total_potential = sum(s['potential_revenue'] for s in stats.values())
 
-        demand = total_sold + total_canceled
-        available = total_sold + total_wasted
+        # Average items per bag across all stores
+        avg_items_per_bag = (total_items_distributed / total_bags_sold) if total_bags_sold > 0 else 0
 
-        # fairness: std dev of exposures (lower = fairer)
+        # Waste rate = items wasted / items available
+        waste_rate = (total_items_wasted / total_items_available * 100) if total_items_available > 0 else 0
+
+        # Revenue efficiency = actual revenue / potential revenue
+        revenue_efficiency = (total_revenue / total_potential * 100) if total_potential > 0 else 0
+
+        # Fairness metric
         exp_vals = list(exposures.values()) if exposures else [0]
         fairness_std = np.std(exp_vals) if len(exp_vals) > 1 else 0
 
         return {
-            'total_sold': total_sold,
-            'total_canceled': total_canceled,
-            'total_wasted': total_wasted,
+            'total_bags_sold': total_bags_sold,
+            'total_items_available': total_items_available,
+            'total_items_distributed': total_items_distributed,
+            'total_items_wasted': total_items_wasted,
+            'avg_items_per_bag': round(avg_items_per_bag, 2),
             'total_revenue': round(total_revenue, 2),
-            'total_lost_revenue': round(total_lost, 2),
-            'fulfillment_rate': round(total_sold / demand * 100, 1) if demand > 0 else 0,
-            'waste_rate': round(total_wasted / available * 100, 1) if available > 0 else 0,
+            'potential_revenue': round(total_potential, 2),
+            'revenue_efficiency': round(revenue_efficiency, 1),
+            'waste_rate': round(waste_rate, 1),
             'customer_leave_rate': round(left / total_cust * 100, 1) if total_cust > 0 else 0,
             'fairness_std': round(fairness_std, 2)
         }
