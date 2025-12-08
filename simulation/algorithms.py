@@ -118,6 +118,179 @@ def inventory_aware(stores_df, n, current_bags):
     scores.sort(key=lambda x: x[1], reverse=True)
     return [sid for sid, _ in scores[:n]]
 
+
+def underdog_boost(stores_df, n, current_bags):
+    """
+    UNDERDOG BOOST: Inverse rating multiplier for inventory priority.
+
+    Key Insight: High-rated stores will sell regardless of visibility.
+    Low-rated stores with inventory need exposure to avoid waste.
+
+    Approach: Instead of adding rating and inventory, we use rating
+    as an INVERSE multiplier. Lower rating = higher boost for inventory.
+
+    Formula:
+        boost_factor = (5.5 - rating) / 4.5  # Range: ~0.1 to 1.0
+        score = inventory_norm * boost_factor + 0.2 * rating_norm
+
+    A 3.0 rated store with 20 bags scores HIGHER than a 4.5 rated store
+    with 20 bags, because the 3.0 store needs help getting customers.
+
+    Time Complexity: O(S log S)
+    Technique: Greedy with inverse weighting
+    """
+    available_ids = [sid for sid, bags in current_bags.items() if bags > 0]
+    if not available_ids:
+        return []
+
+    available = stores_df[stores_df['store_id'].isin(available_ids)]
+    max_bags = max(current_bags[sid] for sid in available_ids)
+
+    scores = []
+    for _, row in available.iterrows():
+        sid = row['store_id']
+        rating = row['average_overall_rating']
+        inventory_norm = current_bags[sid] / max_bags
+        rating_norm = rating / 5.0
+
+        # Inverse boost: lower rating = higher multiplier
+        # Rating 5.0 -> boost 0.11, Rating 3.0 -> boost 0.56, Rating 1.0 -> boost 1.0
+        boost_factor = (5.5 - rating) / 4.5
+
+        # Inventory heavily weighted, rating just prevents showing terrible stores
+        score = inventory_norm * boost_factor + 0.2 * rating_norm
+        scores.append((sid, score))
+
+    scores.sort(key=lambda x: x[1], reverse=True)
+    return [sid for sid, _ in scores[:n]]
+
+
+def waste_prevention_threshold(stores_df, n, current_bags):
+    """
+    WASTE PREVENTION THRESHOLD: Binary rescue system for at-risk stores.
+
+    Key Insight: Waste only happens when a store gets 0 customers.
+    A store with 5 bags and 0 customers = 100% waste.
+    A store with 30 bags and 1 customer = 0% waste (just less items per bag).
+
+    Approach: Calculate "risk score" based on inventory vs expected demand.
+    High-rated stores have high expected demand, low-rated stores have low demand.
+    If inventory >> expected_demand, store is "at risk" and gets priority.
+
+    Risk calculation:
+        expected_demand = rating / 5.0 * avg_customers_per_store
+        risk = inventory / expected_demand (capped at 3.0)
+
+    Stores with risk > 1.5 are considered "at-risk" and prioritized.
+
+    Time Complexity: O(S log S)
+    Technique: Transform and Conquer (transform to risk scores)
+    """
+    available_ids = [sid for sid, bags in current_bags.items() if bags > 0]
+    if not available_ids:
+        return []
+
+    available = stores_df[stores_df['store_id'].isin(available_ids)]
+
+    # Estimate: assume each store might get ~3 customers on average
+    avg_customers_estimate = 3.0
+
+    scores = []
+    for _, row in available.iterrows():
+        sid = row['store_id']
+        rating = row['average_overall_rating']
+        inventory = current_bags[sid]
+
+        # Expected demand based on rating (higher rating = more expected customers)
+        expected_demand = (rating / 5.0) * avg_customers_estimate
+        expected_demand = max(0.5, expected_demand)  # Floor to avoid division issues
+
+        # Risk: how much inventory vs expected demand
+        # High risk = lots of inventory relative to expected customers
+        risk = min(3.0, inventory / expected_demand)
+
+        # At-risk stores (risk > 1.5) get priority boost
+        if risk > 1.5:
+            # Rescue priority: high risk stores shown first
+            score = 1.0 + risk  # Score 2.5 to 4.0 for at-risk
+        else:
+            # Normal stores: blend of rating and inventory
+            rating_norm = rating / 5.0
+            score = 0.6 * rating_norm + 0.4 * (inventory / 30.0)
+
+        scores.append((sid, score))
+
+    scores.sort(key=lambda x: x[1], reverse=True)
+    return [sid for sid, _ in scores[:n]]
+
+
+def price_value_optimizer(stores_df, n, current_bags):
+    """
+    PRICE-VALUE OPTIMIZER: Customer-centric value calculation.
+
+    Key Insight: Customers want the best value for their money.
+    Value = items_per_bag / price_paid
+
+    In the surprise bag model:
+    - More inventory with fewer customers = more items per bag
+    - Lower price = better deal
+
+    We estimate potential items-per-bag as: inventory / estimated_customers
+    Then compute value_score = potential_items / price
+
+    This incentivizes showing stores where customers get the best deal,
+    which also happens to be stores with high inventory (reducing waste).
+
+    Formula:
+        estimated_customers = 2 + rating  # 3 to 7 customers expected
+        potential_items_per_bag = inventory / estimated_customers
+        value_per_egp = potential_items_per_bag / price
+        score = value_per_egp_normalized + 0.3 * rating_norm
+
+    Time Complexity: O(S log S)
+    Technique: Transform and Conquer (transform to value metrics)
+    """
+    available_ids = [sid for sid, bags in current_bags.items() if bags > 0]
+    if not available_ids:
+        return []
+
+    available = stores_df[stores_df['store_id'].isin(available_ids)]
+
+    # First pass: calculate value scores
+    value_scores = {}
+    for _, row in available.iterrows():
+        sid = row['store_id']
+        rating = row['average_overall_rating']
+        inventory = current_bags[sid]
+        price = row['price']
+
+        # Estimate customers based on rating (higher rating attracts more)
+        estimated_customers = 2 + rating  # Range: 3 to 7
+
+        # Potential items per bag if only estimated_customers show up
+        potential_items = inventory / estimated_customers
+
+        # Value: items per EGP spent
+        value_per_egp = potential_items / price if price > 0 else 0
+        value_scores[sid] = value_per_egp
+
+    # Normalize value scores
+    max_value = max(value_scores.values()) if value_scores else 1
+
+    scores = []
+    for _, row in available.iterrows():
+        sid = row['store_id']
+        rating_norm = row['average_overall_rating'] / 5.0
+        value_norm = value_scores[sid] / max_value
+
+        # Value is primary (70%), rating secondary (30%)
+        score = 0.7 * value_norm + 0.3 * rating_norm
+        scores.append((sid, score))
+
+    scores.sort(key=lambda x: x[1], reverse=True)
+    return [sid for sid, _ in scores[:n]]
+
+
 def accuracy_aware_ranking(stores_df, n, current_bags, accuracy_tracker=None):
     """
     ACCURACY-AWARE ALGORITHM: Adjusts ranking based on historical accuracy.
@@ -341,9 +514,9 @@ def custom_algorithm_1(stores_df, n, current_bags):
 ALGORITHMS = {
     'Greedy Baseline': greedy_baseline,
     'Inventory Aware': inventory_aware,
-   
-    # Add your algorithms here:
-    # 'My Algorithm': custom_algorithm_1,
+    'Underdog Boost': underdog_boost,
+    'Waste Prevention': waste_prevention_threshold,
+    'Price-Value Optimizer': price_value_optimizer,
 }
 
 def register_accuracy_aware_algorithm(accuracy_tracker, name='Accuracy Aware'):
