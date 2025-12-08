@@ -128,6 +128,14 @@ with st.sidebar:
                           help="Chance a customer shops on any given day")
 
     st.markdown("---")
+    st.markdown("### Advanced Settings")
+
+    use_accuracy = st.checkbox("Use Accuracy Adjustment", value=True,
+                               help="Adjust estimates based on store history")
+    alt_accept_rate = st.slider("Alternative Acceptance Rate", 0.0, 1.0, 0.6,
+                                help="Chance customer accepts alternative when cancelled")
+
+    st.markdown("---")
     st.markdown("### Algorithm")
 
     selected_algos = st.multiselect(
@@ -189,7 +197,9 @@ if run_btn:
             algo_func = ALGORITHMS[algo_name]
             run_seed = int(time.time() * 1000) % 100000 if seed is None else seed
             engine = SimulationEngine(stores, customers, seed=run_seed)
-            results[algo_name] = engine.run(num_days, n_stores, algo_func, shop_prob)
+            results[algo_name] = engine.run(num_days, n_stores, algo_func, shop_prob,
+                                           use_accuracy_adjustment=use_accuracy,
+                                           alternative_acceptance_rate=alt_accept_rate)
             progress.progress((i + 1) / len(selected_algos))
 
         progress.empty()
@@ -223,6 +233,17 @@ if run_btn:
         with col8:
             st.metric("Fairness (std)", f"{summary['fairness_std']:.1f}")
 
+        # New KPIs row
+        col9, col10, col11, col12 = st.columns(4)
+        with col9:
+            st.metric("Cancellations", f"{summary.get('total_cancellations', 0):,}")
+        with col10:
+            st.metric("Cancellation Rate", f"{summary.get('cancellation_rate', 0):.1f}%")
+        with col11:
+            st.metric("Avg Accuracy", f"{summary.get('avg_store_accuracy', 1.0):.2f}")
+        with col12:
+            st.metric("Satisfaction", f"{summary.get('customer_satisfaction_score', 0):.0f}/100")
+
     else:
         # Comparison table for multiple algorithms
         comp_data = []
@@ -232,11 +253,11 @@ if run_btn:
                 'Algorithm': algo_name,
                 'Bags Sold': s['total_bags_sold'],
                 'Items Wasted': s['total_items_wasted'],
-                'Avg Items/Bag': s['avg_items_per_bag'],
                 'Revenue': f"{s['total_revenue']:,.0f}",
-                'Efficiency %': s['revenue_efficiency'],
                 'Waste %': s['waste_rate'],
+                'Cancel %': s.get('cancellation_rate', 0),
                 'Leave %': s['customer_leave_rate'],
+                'Satisfaction': s.get('customer_satisfaction_score', 0),
                 'Fairness': s['fairness_std']
             })
 
@@ -352,10 +373,8 @@ if run_btn:
             'Branch': row['branch'],
             'Rating': row['average_overall_rating'],
             'Bags Sold': stat['bags_sold'],
-            'Items Available': stat['items_available'],
-            'Items Distributed': stat['items_distributed'],
             'Items Wasted': stat['items_wasted'],
-            'Avg Items/Bag': stat['avg_items_per_bag'],
+            'Cancellations': stat.get('cancellations', 0),
             'Revenue': f"{stat['revenue']:,.0f}",
         })
 

@@ -227,8 +227,8 @@ class CancellationHandler:
                 record['status'] = 'alternative_accepted'
                 record['accepted_store'] = accepted_store_id
                 break
-        
-                return {
+
+        return {
             'status': 'success',
             'customer_id': customer_id,
             'new_store': accepted_store_id,

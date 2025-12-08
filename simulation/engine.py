@@ -29,6 +29,10 @@ Surprise Bag Model:
 import numpy as np
 import random
 from collections import defaultdict
+from datetime import date, timedelta
+
+from simulation.accuracy_tracker import AccuracyTracker
+from simulation.cancellation_handler import CancellationHandler
 
 
 class SimulationEngine:
@@ -414,3 +418,15 @@ class SimulationEngine:
             'avg_store_accuracy': round(avg_accuracy, 3),
             'customer_satisfaction_score': round(satisfaction_score, 1)
         }
+
+    def _compile_accuracy_data(self):
+        """
+        Compile accuracy tracking data for all stores.
+
+        Returns:
+            dict: {store_id: accuracy_metrics}
+        """
+        accuracy_data = {}
+        for store_id in self.accuracy_tracker.history.keys():
+            accuracy_data[store_id] = self.accuracy_tracker.get_store_performance_summary(store_id)
+        return accuracy_data
