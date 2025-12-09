@@ -291,7 +291,10 @@ if run_btn:
                 'Demand %': s.get('demand_fulfillment', 0),
                 'Fulfilled': s.get('total_fulfilled', 0),
                 'Cancelled': s.get('total_cancelled', 0),
+                'Unsold (Waste)': s.get('total_unsold', 0),
+                'Waste %': s.get('waste_rate', 0),
                 'Revenue': f"{s['total_revenue']:,.0f}",
+                'Lost Revenue': f"{s.get('total_lost_revenue', 0):,.0f}",
                 'RevEff %': s['revenue_efficiency'],
                 'Fairness': s.get('fairness_score', 0)
             })

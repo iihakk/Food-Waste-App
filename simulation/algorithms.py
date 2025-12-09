@@ -127,6 +127,77 @@ def inventory_aware(stores_df, n, current_bags, customer_valuations=None):
     return [sid for sid, _ in scores[:n]]
 
 
+def inventory_rating_equilibrium(stores_df, n, current_bags, customer_valuations=None):
+    """
+    INVENTORY-RATING EQUILIBRIUM: Greedy with Inventory-Demand Balancing
+
+    Strategy: Extension of the Greedy Baseline.
+    Instead of sorting purely by rating, this algorithm seeks an 'equilibrium' 
+    where the highest rated stores (Demand) that also have the most stock (Supply) 
+    are prioritized. 
+    
+    It prevents the issue where the greedy baseline shows high-rated stores 
+    that might only have 1 bag left, ignoring a slightly lower-rated store 
+    with 50 bags that needs the customers more.
+
+    Formula:
+        Score = Rating_Normalized * (1 + Inventory_Normalized)
+
+    Pros:
+    - Maximizes sell-through rate (High Quality + High Volume)
+    - Prevents stock-outs at top stores by rotating in high-supply alternatives
+    - Maintains the "Best Stores" feel of the greedy baseline
+
+    Time Complexity: O(n log n)
+    Technique: Greedy (with weighted heuristic)
+
+    Args:
+        stores_df (DataFrame): Store data
+        n (int): Number of stores to display
+        current_bags (dict): {store_id: remaining_bags}
+
+    Returns:
+        list: Top n store IDs by equilibrium score
+    """
+    # 1. Filter to stores with available bags (Identical to Greedy Baseline)
+    available_ids = [sid for sid, bags in current_bags.items() if bags > 0]
+    if not available_ids:
+        return []
+
+    # Create a copy to avoid SettingWithCopy warnings on the original DF
+    available = stores_df[stores_df['store_id'].isin(available_ids)].copy()
+
+    # 2. Calculate Normalization Factors
+    # Avoid division by zero if max_bags is somehow 0 (though unlikely due to filter)
+    max_bags = max([current_bags[sid] for sid in available_ids]) if available_ids else 1
+    max_rating = 5.0
+
+    scores = []
+    for _, row in available.iterrows():
+        sid = row['store_id']
+        rating = row['average_overall_rating']
+        inventory = current_bags[sid]
+
+        # Demand Index (Normalized Rating)
+        demand_index = rating / max_rating
+
+        # Supply Index (Normalized Inventory)
+        supply_index = inventory / max_bags
+
+        # Equilibrium Score Calculation:
+        # We take the Demand (Rating) as the base, and boost it by the Supply (Inventory).
+        # - If a store has high rating but low inventory, it gets a standard score.
+        # - If a store has high rating AND high inventory, it gets a massive boost (Equilibrium).
+        score = demand_index * (1.0 + supply_index)
+        
+        scores.append((sid, score))
+
+    # 3. Sort by Score (descending) and take top n
+    scores.sort(key=lambda x: x[1], reverse=True)
+    
+    return [sid for sid, _ in scores[:n]]
+
+
 def underdog_boost(stores_df, n, current_bags, customer_valuations=None):
     """
     UNDERDOG BOOST: Inverse rating multiplier for inventory priority.
@@ -2323,6 +2394,7 @@ def personalized_ultimate(stores_df, n, current_bags, customer_valuations=None):
 ALGORITHMS = {
     'Greedy Baseline': greedy_baseline,
     'Inventory Aware': inventory_aware,
+    'Inventory-Rating Equilibrium': inventory_rating_equilibrium,
     'Underdog Boost': underdog_boost,
     'Waste Prevention': waste_prevention_threshold,
     'Price-Value Optimizer': price_value_optimizer,

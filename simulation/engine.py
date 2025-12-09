@@ -202,7 +202,9 @@ class SimulationEngine:
                     unsold = 0  # All actual bags used
 
                 revenue = fulfilled * price
-                lost_revenue = cancelled * price
+                # Lost revenue = revenue lost from unsold/wasted bags
+                # (not from cancellations - those bags didn't exist to sell)
+                lost_revenue = unsold * price
 
                 # Update cumulative stats
                 stats[sid]['reservations'] += reservations
@@ -268,15 +270,15 @@ class SimulationEngine:
         total_estimated = sum(s['estimated_total'] for s in stats.values())
         total_actual = sum(s['actual_total'] for s in stats.values())
 
-        # Revenue efficiency: measure ORDER FULFILLMENT in revenue terms
-        # This measures "of orders placed, what % were fulfilled?"
+        # Revenue efficiency: measure how much of AVAILABLE inventory was sold
+        # This measures "of bags available (actual), what % were sold?"
         #
-        # OLD BUG: Including unsold bags penalized fair algorithms!
-        # Fair algorithms engage MORE stores → more unsold counted → lower efficiency
+        # total_potential = revenue + lost_revenue (from unsold bags)
+        #                 = fulfilled * price + unsold * price
+        #                 = actual * price (total value of available inventory)
         #
-        # NEW FIX: Only count revenue from actual transactions (fulfilled + cancelled)
-        # If 0 cancellations → efficiency = 100% (all orders fulfilled)
-        # If some cancellations → efficiency < 100%
+        # If 0 waste → efficiency = 100% (all bags sold)
+        # If some waste → efficiency < 100%
         total_potential = total_revenue + total_lost_revenue
 
         # Fulfillment rate = fulfilled / reservations
@@ -289,8 +291,9 @@ class SimulationEngine:
         waste_rate = (total_unsold / total_actual * 100) if total_actual > 0 else 0
 
         # Revenue efficiency = actual revenue / potential revenue
-        # If no orders at all, efficiency is undefined (set to 0)
-        # If orders but no cancellations, efficiency = 100%
+        # Potential = value of all available bags (actual inventory)
+        # If no waste → efficiency = 100% (all bags sold)
+        # If some waste → efficiency < 100%
         revenue_efficiency = (total_revenue / total_potential * 100) if total_potential > 0 else 100
 
         # Customer leave rate (including those who left + cancelled orders)
