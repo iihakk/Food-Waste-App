@@ -53,5 +53,8 @@ ENV/
 # Logs
 *.log
 
+# CSV files
+*.csv
+
 # Local data (if sensitive)
 # data/
