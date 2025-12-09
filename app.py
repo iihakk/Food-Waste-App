@@ -213,55 +213,70 @@ if run_btn:
         algo = selected_algos[0]
         summary = results[algo]['summary']
 
+        # Algorithm Score - the main comparison metric
+        st.markdown("### Algorithm Score")
+        score_col1, score_col2 = st.columns([1, 3])
+        with score_col1:
+            score = summary.get('algorithm_score', 0)
+            if score >= 80:
+                st.success(f"**{score:.1f}** / 100")
+            elif score >= 60:
+                st.warning(f"**{score:.1f}** / 100")
+            else:
+                st.error(f"**{score:.1f}** / 100")
+        with score_col2:
+            st.caption("Weighted: 30% Revenue + 30% Waste Reduction + 25% Satisfaction + 15% Fairness")
+
+        st.markdown("### Core Metrics")
         col1, col2, col3, col4 = st.columns(4)
         with col1:
-            st.metric("Bags Sold", f"{summary['total_bags_sold']:,}")
+            st.metric("Reservations", f"{summary.get('total_reservations', 0):,}")
         with col2:
-            st.metric("Items Wasted", f"{summary['total_items_wasted']:,}")
+            st.metric("Fulfilled", f"{summary.get('total_fulfilled', 0):,}")
         with col3:
-            st.metric("Avg Items/Bag", f"{summary['avg_items_per_bag']:.1f}")
+            st.metric("Cancelled", f"{summary.get('total_cancelled', 0):,}")
         with col4:
-            st.metric("Revenue", f"{summary['total_revenue']:,.0f} EGP")
+            st.metric("Unsold (Waste)", f"{summary.get('total_unsold', 0):,}")
 
         col5, col6, col7, col8 = st.columns(4)
         with col5:
-            st.metric("Revenue Efficiency", f"{summary['revenue_efficiency']}%")
+            st.metric("Revenue", f"{summary['total_revenue']:,.0f} EGP")
         with col6:
-            st.metric("Waste Rate", f"{summary['waste_rate']}%")
+            st.metric("Lost Revenue", f"{summary.get('total_lost_revenue', 0):,.0f} EGP")
         with col7:
-            st.metric("Leave Rate", f"{summary['customer_leave_rate']}%")
+            st.metric("Revenue Efficiency", f"{summary['revenue_efficiency']}%")
         with col8:
-            st.metric("Fairness (std)", f"{summary['fairness_std']:.1f}")
+            st.metric("Waste Rate", f"{summary['waste_rate']}%")
 
-        # New KPIs row
         col9, col10, col11, col12 = st.columns(4)
         with col9:
-            st.metric("Cancellations", f"{summary.get('total_cancellations', 0):,}")
+            st.metric("Fulfillment Rate", f"{summary.get('fulfillment_rate', 0):.1f}%")
         with col10:
             st.metric("Cancellation Rate", f"{summary.get('cancellation_rate', 0):.1f}%")
         with col11:
-            st.metric("Avg Accuracy", f"{summary.get('avg_store_accuracy', 1.0):.2f}")
+            st.metric("Leave Rate", f"{summary['customer_leave_rate']}%")
         with col12:
-            st.metric("Satisfaction", f"{summary.get('customer_satisfaction_score', 0):.0f}/100")
+            st.metric("Fairness Score", f"{summary.get('fairness_score', 0):.1f}/100")
 
     else:
-        # Comparison table for multiple algorithms
+        # Comparison table for multiple algorithms - sorted by Algorithm Score
         comp_data = []
         for algo_name, res in results.items():
             s = res['summary']
             comp_data.append({
                 'Algorithm': algo_name,
-                'Bags Sold': s['total_bags_sold'],
-                'Items Wasted': s['total_items_wasted'],
+                'Score': s.get('algorithm_score', 0),
+                'Fulfilled': s.get('total_fulfilled', 0),
+                'Cancelled': s.get('total_cancelled', 0),
+                'Unsold': s.get('total_unsold', 0),
                 'Revenue': f"{s['total_revenue']:,.0f}",
                 'Waste %': s['waste_rate'],
                 'Cancel %': s.get('cancellation_rate', 0),
                 'Leave %': s['customer_leave_rate'],
-                'Satisfaction': s.get('customer_satisfaction_score', 0),
-                'Fairness': s['fairness_std']
+                'Fairness': s.get('fairness_score', 0)
             })
 
-        comp_df = pd.DataFrame(comp_data)
+        comp_df = pd.DataFrame(comp_data).sort_values('Score', ascending=False)
         st.dataframe(comp_df, use_container_width=True, hide_index=True)
 
     # Charts
@@ -278,15 +293,15 @@ if run_btn:
             row = stores[stores['store_id'] == sid].iloc[0]
             store_perf.append({
                 'Store': f"{row['store_name']} ({row['branch']})",
-                'Bags Sold': stat['bags_sold'],
-                'Items Distributed': stat['items_distributed'],
-                'Items Wasted': stat['items_wasted']
+                'Fulfilled': stat['fulfilled'],
+                'Cancelled': stat['cancelled'],
+                'Unsold': stat['unsold']
             })
 
         perf_df = pd.DataFrame(store_perf)
 
-        fig = px.bar(perf_df, x='Store', y=['Bags Sold', 'Items Wasted'],
-                     barmode='group', color_discrete_sequence=[COLORS[0], COLORS[3]])
+        fig = px.bar(perf_df, x='Store', y=['Fulfilled', 'Cancelled', 'Unsold'],
+                     barmode='group', color_discrete_sequence=[COLORS[0], COLORS[2], COLORS[3]])
         fig.update_layout(
             plot_bgcolor='rgba(0,0,0,0)',
             paper_bgcolor='rgba(0,0,0,0)',
@@ -302,20 +317,22 @@ if run_btn:
 
         daily_summary = []
         for d in daily:
-            day_bags = sum(s['bags_sold'] for s in d['stores'].values())
-            day_wasted = sum(s['items_wasted'] for s in d['stores'].values())
+            day_fulfilled = sum(s['fulfilled'] for s in d['stores'].values())
+            day_cancelled = sum(s['cancelled'] for s in d['stores'].values())
+            day_unsold = sum(s['unsold'] for s in d['stores'].values())
             day_rev = sum(s['revenue'] for s in d['stores'].values())
             daily_summary.append({
                 'Day': d['day'],
-                'Bags Sold': day_bags,
-                'Items Wasted': day_wasted,
+                'Fulfilled': day_fulfilled,
+                'Cancelled': day_cancelled,
+                'Unsold': day_unsold,
                 'Revenue': day_rev
             })
 
         daily_df = pd.DataFrame(daily_summary)
 
-        fig = px.line(daily_df, x='Day', y=['Bags Sold', 'Items Wasted'],
-                      color_discrete_sequence=[COLORS[0], COLORS[3]],
+        fig = px.line(daily_df, x='Day', y=['Fulfilled', 'Cancelled', 'Unsold'],
+                      color_discrete_sequence=[COLORS[0], COLORS[2], COLORS[3]],
                       markers=True)
         fig.update_layout(
             plot_bgcolor='rgba(0,0,0,0)',
@@ -372,9 +389,10 @@ if run_btn:
             'Store': row['store_name'],
             'Branch': row['branch'],
             'Rating': row['average_overall_rating'],
-            'Bags Sold': stat['bags_sold'],
-            'Items Wasted': stat['items_wasted'],
-            'Cancellations': stat.get('cancellations', 0),
+            'Reservations': stat['reservations'],
+            'Fulfilled': stat['fulfilled'],
+            'Cancelled': stat['cancelled'],
+            'Unsold': stat['unsold'],
             'Revenue': f"{stat['revenue']:,.0f}",
         })
 

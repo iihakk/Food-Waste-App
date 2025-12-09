@@ -7,23 +7,22 @@ This module contains the core simulation logic that models:
 - Tracking of KPIs (sold, canceled, wasted bags, revenue, etc.)
 
 The simulation follows this daily cycle:
-1. Morning: Each store sets available bags (with random variation from average)
-2. Throughout day: Customers arrive and see n stores based on ranking algorithm
-3. Customer decision: Pick best store from displayed options (based on valuation)
-4. End of day: Calculate sold, canceled, wasted bags and revenue
+1. Morning: Each store ESTIMATES bags (this is what the app shows)
+2. Throughout day: Customers see n stores based on estimates, make RESERVATIONS
+3. End of day: ACTUAL bags revealed, cancellations if actual < reservations
+4. Revenue/waste calculated based on actual fulfillment
 
 Key assumptions:
-- Each customer buys exactly 1 surprise bag
-- Customers only see n stores (not all) - this is the key constraint
-- If a customer's preferred stores have no bags, they leave the system
-- Stores estimate bags at 9AM but actual availability varies (±30%)
+- Algorithm and customers only see ESTIMATED bags (not actual)
+- Customers make reservations, not immediate purchases
+- Actual bags revealed at end of day (varies ±30% from estimate)
+- If actual < reservations → some orders cancelled
+- If actual >= reservations → all orders fulfilled, excess = unsold/waste
 
 Surprise Bag Model:
-- Stores have X items worth of food to distribute
-- If N customers order, each bag contains X/N items worth of food
-- Example: 10 items, 3 customers -> each bag has ~3.3 items worth
-- If 0 customers, all food is wasted
-- Revenue = N * bag_price (customers pay per bag, not per item)
+- Each fulfilled reservation = 1 bag sold
+- Unsold bags (actual - fulfilled) = waste
+- Revenue = fulfilled_orders × bag_price
 """
 
 import numpy as np
@@ -63,11 +62,13 @@ class SimulationEngine:
         """
         Run the simulation for a specified number of days.
 
-        In the surprise bag model:
-        - Each store has X "bag equivalents" of food items
-        - Each customer who orders gets 1 bag
-        - If N customers order, they share all X items (each bag has X/N items)
-        - If 0 customers order, all items are wasted
+        CORRECT MODEL:
+        - Morning: Stores provide ESTIMATES (what algorithm/customers see)
+        - Day: Customers make RESERVATIONS based on estimates
+        - End of Day: ACTUAL bags revealed
+          - If actual >= reservations: all fulfilled
+          - If actual < reservations: some cancelled
+          - Unsold = actual - fulfilled = waste
 
         Args:
             num_days (int): Number of days to simulate
@@ -75,35 +76,25 @@ class SimulationEngine:
             ranking_func (callable): Algorithm that selects which stores to display
                                      Signature: func(stores_df, n, current_bags) -> list[store_id]
             shopping_probability (float): Probability a customer shops on any day (0.0-1.0)
-            use_accuracy_adjustment (bool): NEW - Whether to adjust estimates based on history
-            alternative_acceptance_rate (float): NEW - Probability customer accepts alternative (0.0-1.0)
+            use_accuracy_adjustment (bool): Whether to adjust estimates based on history (future use)
+            alternative_acceptance_rate (float): Probability customer accepts alternative when cancelled
 
         Returns:
-            dict: Results containing:
-                - store_stats: Per-store metrics
-                - daily_data: Day-by-day breakdown
-                - store_exposures: How many times each store was shown
-                - total_customers: Total customer visits
-                - customers_left: Customers who left without buying
-                - summary: Aggregated KPIs
-                - accuracy_data: NEW - Store accuracy metrics
-                - cancellation_data: NEW - Cancellation handling stats
+            dict: Results containing all KPIs and the Algorithm Score
         """
         random.seed(self.seed)
         np.random.seed(self.seed)
 
         store_ids = self.stores['store_id'].tolist()
 
-        # Initialize tracking dictionaries (UPDATED with new fields)
+        # Initialize tracking
         stats = {sid: {
-            'bags_sold': 0,
-            'items_available': 0,
-            'items_distributed': 0,
-            'items_wasted': 0,
+            'reservations': 0,
+            'fulfilled': 0,
+            'cancelled': 0,
+            'unsold': 0,
             'revenue': 0,
-            'potential_revenue': 0,
-            'avg_items_per_bag': 0,
-            'cancellations': 0,
+            'lost_revenue': 0,
             'estimated_total': 0,
             'actual_total': 0,
         } for sid in store_ids}
@@ -113,69 +104,35 @@ class SimulationEngine:
         customers_left = 0
         daily_data = []
 
-        # Reset handlers for fresh simulation
-        self.accuracy_tracker = AccuracyTracker(window_size=14, min_samples=2)
-        self.cancellation_handler = CancellationHandler(points_per_cancellation=50)
-
         for day in range(1, num_days + 1):
             # ==================== MORNING PHASE ====================
-            # Each store sets their available items for the day
-            daily_estimated = {}  # RENAMED for clarity
-            daily_actual = {}     # NEW: Track actual vs estimated
+            # Store sets ESTIMATE (what app shows) and ACTUAL (revealed end of day)
+            daily_estimated = {}
+            daily_actual = {}
             daily_prices = {}
-            
+
             for _, store in self.stores.iterrows():
                 sid = store['store_id']
                 estimated = store['average_bags_at_9AM']
-                # Add random variation (±30%) - this is the ACTUAL amount
+                # Actual varies ±30% from estimate (revealed at end of day)
                 actual = max(1, int(estimated * np.random.uniform(0.7, 1.3)))
-                
+
                 daily_estimated[sid] = estimated
                 daily_actual[sid] = actual
                 daily_prices[sid] = store['price']
-                
-                # Track totals for accuracy calculation
+
                 stats[sid]['estimated_total'] += estimated
                 stats[sid]['actual_total'] += actual
 
-            # Calculate what the algorithm sees (adjusted or raw)
-            if use_accuracy_adjustment and day > 2:
-                # Use accuracy-adjusted estimates
-                current_items = {}
-                for sid in store_ids:
-                    adjusted = self.accuracy_tracker.get_adjusted_estimate(sid, daily_estimated[sid])
-                    # Conservative: use minimum of adjusted estimate and actual
-                    current_items[sid] = min(adjusted, daily_actual[sid])
-            else:
-                # Use actual items (original behavior)
-                current_items = daily_actual.copy()
+            # Algorithm sees ESTIMATED bags (not actual!)
+            remaining_estimated = daily_estimated.copy()
 
-            # Track what's really available (for cancellation detection)
-            actual_remaining = daily_actual.copy()
-            
-            # Track customers per store
-            customers_per_store = defaultdict(int)
+            # Track reservations per store for this day
+            daily_reservations = defaultdict(int)
             day_customers_left = 0
-            day_cancellations = defaultdict(int)
-
-            # Simulation date for priority queue
-            sim_date = date(2024, 1, 1) + timedelta(days=day - 1)
-
-            # ==================== NEW: PRIORITY CUSTOMER PHASE ====================
-            priority_customers = self.cancellation_handler.get_priority_customers(sim_date)
-            
-            for priority_info in priority_customers:
-                cust_id = priority_info['customer_id']
-                priority_store = priority_info['store_id']
-                
-                if actual_remaining.get(priority_store, 0) > 0:
-                    customers_per_store[priority_store] += 1
-                    actual_remaining[priority_store] -= 1
-                    current_items[priority_store] = max(0, current_items[priority_store] - 1)
-                    self.cancellation_handler.serve_priority_customer(sim_date, cust_id, priority_store)
-                    total_customers += 1
 
             # ==================== CUSTOMER ARRIVAL PHASE ====================
+            # Customers make RESERVATIONS based on estimated availability
             for _, cust in self.customers.iterrows():
                 if random.random() > shopping_probability:
                     continue
@@ -183,8 +140,8 @@ class SimulationEngine:
                 total_customers += 1
                 cust_id = cust['customer_id']
 
-                # Get stores to display using ranking algorithm
-                displayed = ranking_func(self.stores, n_stores, current_items)
+                # Algorithm sees remaining ESTIMATES
+                displayed = ranking_func(self.stores, n_stores, remaining_estimated)
 
                 # Track exposures
                 for sid in displayed:
@@ -195,7 +152,7 @@ class SimulationEngine:
                     day_customers_left += 1
                     continue
 
-                # Build customer valuations dict for cancellation handler
+                # Build customer valuations
                 customer_valuations = {}
                 for sid in store_ids:
                     col = f'store{sid}_valuation'
@@ -207,216 +164,202 @@ class SimulationEngine:
                 best_val = 0
                 for sid in displayed:
                     val = customer_valuations.get(sid, 0)
-                    if val > best_val:
+                    if val > best_val and remaining_estimated.get(sid, 0) > 0:
                         best_val = val
                         best_store = sid
 
-                # Customer orders from preferred store
-                if best_store:
-                    # Check ACTUAL availability (may differ from displayed)
-                    if actual_remaining.get(best_store, 0) > 0:
-                        # Successful order
-                        customers_per_store[best_store] += 1
-                        actual_remaining[best_store] -= 1
-                        current_items[best_store] = max(0, current_items[best_store] - 1)
-                    else:
-                        # ============ NEW: CANCELLATION HANDLING ============
-                        day_cancellations[best_store] += 1
-                        stats[best_store]['cancellations'] += 1
-                        
-                        # Find stores with actual availability for alternatives
-                        available_stores = [sid for sid, bags in actual_remaining.items() if bags > 0]
-                        
-                        # Handle the cancellation
-                        result = self.cancellation_handler.handle_cancellation(
-                            customer_id=cust_id,
-                            original_store_id=best_store,
-                            customer_valuations=customer_valuations,
-                            available_stores=available_stores,
-                            current_bags=actual_remaining,
-                            stores_df=self.stores,
-                            order_price=daily_prices[best_store],
-                            current_date=sim_date
-                        )
-                        
-                        # Simulate customer decision on alternatives
-                        if result['status'] == 'alternatives_available' and result['alternatives']:
-                            if random.random() < alternative_acceptance_rate:
-                                # Customer accepts alternative
-                                alt_store = result['alternatives'][0][0]  # Best alternative
-                                
-                                if actual_remaining.get(alt_store, 0) > 0:
-                                    self.cancellation_handler.accept_alternative(cust_id, alt_store)
-                                    customers_per_store[alt_store] += 1
-                                    actual_remaining[alt_store] -= 1
-                                    current_items[alt_store] = max(0, current_items[alt_store] - 1)
-                                else:
-                                    # Alternative also ran out
-                                    self.cancellation_handler.refuse_alternatives(
-                                        cust_id, best_store, daily_prices[best_store], sim_date
-                                    )
-                                    customers_left += 1
-                                    day_customers_left += 1
-                            else:
-                                # Customer refuses alternatives -> priority + refund + points
-                                self.cancellation_handler.refuse_alternatives(
-                                    cust_id, best_store, daily_prices[best_store], sim_date
-                                )
-                                customers_left += 1
-                                day_customers_left += 1
-                        else:
-                            # No alternatives available
-                            customers_left += 1
-                            day_customers_left += 1
+                # Customer makes RESERVATION (not purchase yet)
+                if best_store and remaining_estimated.get(best_store, 0) > 0:
+                    daily_reservations[best_store] += 1
+                    remaining_estimated[best_store] -= 1  # Decrement ESTIMATE
                 else:
                     customers_left += 1
                     day_customers_left += 1
 
             # ==================== END OF DAY PHASE ====================
-            # Record accuracy data for each store
-            for sid in store_ids:
-                self.accuracy_tracker.record_day(
-                    sid, 
-                    daily_estimated[sid], 
-                    daily_actual[sid], 
-                    day
-                )
-
-            # Calculate results using surprise bag model
+            # Actual bags revealed, process fulfillment vs cancellations
             day_stats = {}
+            day_cancelled = 0
+
             for sid in store_ids:
-                items_available = daily_actual[sid]  # Use ACTUAL, not estimated
-                num_customers = customers_per_store[sid]
+                estimated = daily_estimated[sid]
+                actual = daily_actual[sid]
+                reservations = daily_reservations[sid]
                 price = daily_prices[sid]
 
-                if num_customers > 0:
-                    bags_sold = num_customers
-                    items_distributed = items_available
-                    items_wasted = 0
-                    items_per_bag = items_available / num_customers
-                    revenue = num_customers * price
+                # Fulfillment logic
+                if reservations <= actual:
+                    # All reservations fulfilled
+                    fulfilled = reservations
+                    cancelled = 0
+                    unsold = actual - reservations  # Excess = waste
                 else:
-                    bags_sold = 0
-                    items_distributed = 0
-                    items_wasted = items_available
-                    items_per_bag = 0
-                    revenue = 0
+                    # Not enough actual bags - some cancelled
+                    fulfilled = actual
+                    cancelled = reservations - actual
+                    unsold = 0  # All actual bags used
 
-                potential_revenue = items_available * price
+                revenue = fulfilled * price
+                lost_revenue = cancelled * price
 
                 # Update cumulative stats
-                stats[sid]['bags_sold'] += bags_sold
-                stats[sid]['items_available'] += items_available
-                stats[sid]['items_distributed'] += items_distributed
-                stats[sid]['items_wasted'] += items_wasted
+                stats[sid]['reservations'] += reservations
+                stats[sid]['fulfilled'] += fulfilled
+                stats[sid]['cancelled'] += cancelled
+                stats[sid]['unsold'] += unsold
                 stats[sid]['revenue'] += revenue
-                stats[sid]['potential_revenue'] += potential_revenue
+                stats[sid]['lost_revenue'] += lost_revenue
+
+                day_cancelled += cancelled
 
                 day_stats[sid] = {
-                    'bags_sold': bags_sold,
-                    'items_available': items_available,
-                    'items_distributed': items_distributed,
-                    'items_wasted': items_wasted,
-                    'items_per_bag': round(items_per_bag, 2),
+                    'estimated': estimated,
+                    'actual': actual,
+                    'reservations': reservations,
+                    'fulfilled': fulfilled,
+                    'cancelled': cancelled,
+                    'unsold': unsold,
                     'revenue': revenue,
-                    'price': price,
-                    'num_customers': num_customers,
-                    # NEW fields
-                    'estimated': daily_estimated[sid],
-                    'actual': daily_actual[sid],
-                    'cancellations': day_cancellations[sid],
-                    'accuracy_ratio': round(daily_actual[sid] / daily_estimated[sid], 3) if daily_estimated[sid] > 0 else 1.0
+                    'price': price
                 }
+
+            # Add cancelled customers to left count
+            customers_left += day_cancelled
 
             daily_data.append({
                 'day': day,
                 'stores': day_stats,
                 'customers_left': day_customers_left,
-                'total_cancellations': sum(day_cancellations.values())  # NEW
+                'total_cancellations': day_cancelled
             })
 
-        # Calculate average items per bag for each store
-        for sid in store_ids:
-            if stats[sid]['bags_sold'] > 0:
-                stats[sid]['avg_items_per_bag'] = round(
-                    stats[sid]['items_distributed'] / stats[sid]['bags_sold'], 2
-                )
-
-        # Compile results with additional data
+        # Compile results
         results = {
             'store_stats': stats,
             'daily_data': daily_data,
             'store_exposures': dict(store_exposures),
             'total_customers': total_customers,
             'customers_left': customers_left,
-            'summary': self._compute_summary(stats, store_exposures, total_customers, customers_left),
-            # NEW: Additional result data
-            'accuracy_data': self._compile_accuracy_data(),
-            'cancellation_data': self.cancellation_handler.get_statistics()
+            'summary': self._compute_summary(stats, store_exposures, total_customers, customers_left)
         }
         return results
     def _compute_summary(self, stats, exposures, total_cust, left):
         """
         Compute aggregated KPIs from simulation results.
 
+        NEW RESERVATION MODEL METRICS:
+        - reservations: Total orders placed
+        - fulfilled: Orders successfully completed
+        - cancelled: Orders cancelled due to insufficient actual bags
+        - unsold: Actual bags that weren't sold (waste)
+
         Returns:
-            dict: Summary metrics including new accuracy and cancellation metrics
+            dict: Summary metrics including Algorithm Score
         """
-        total_bags_sold = sum(s['bags_sold'] for s in stats.values())
-        total_items_available = sum(s['items_available'] for s in stats.values())
-        total_items_distributed = sum(s['items_distributed'] for s in stats.values())
-        total_items_wasted = sum(s['items_wasted'] for s in stats.values())
+        # Core metrics from new model
+        total_reservations = sum(s['reservations'] for s in stats.values())
+        total_fulfilled = sum(s['fulfilled'] for s in stats.values())
+        total_cancelled = sum(s['cancelled'] for s in stats.values())
+        total_unsold = sum(s['unsold'] for s in stats.values())
         total_revenue = sum(s['revenue'] for s in stats.values())
-        total_potential = sum(s['potential_revenue'] for s in stats.values())
+        total_lost_revenue = sum(s['lost_revenue'] for s in stats.values())
+        total_estimated = sum(s['estimated_total'] for s in stats.values())
+        total_actual = sum(s['actual_total'] for s in stats.values())
 
-        # NEW: Cancellation totals
-        total_cancellations = sum(s.get('cancellations', 0) for s in stats.values())
+        # Potential revenue = if all actual bags were sold
+        total_potential = total_revenue + total_lost_revenue + sum(
+            s['unsold'] * (s['revenue'] / s['fulfilled']) if s['fulfilled'] > 0 else 0
+            for s in stats.values()
+        )
 
-        # Average items per bag across all stores
-        avg_items_per_bag = (total_items_distributed / total_bags_sold) if total_bags_sold > 0 else 0
+        # Fulfillment rate = fulfilled / reservations
+        fulfillment_rate = (total_fulfilled / total_reservations * 100) if total_reservations > 0 else 0
 
-        # Waste rate = items wasted / items available
-        waste_rate = (total_items_wasted / total_items_available * 100) if total_items_available > 0 else 0
+        # Cancellation rate = cancelled / reservations
+        cancellation_rate = (total_cancelled / total_reservations * 100) if total_reservations > 0 else 0
+
+        # Waste rate = unsold / total actual bags
+        waste_rate = (total_unsold / total_actual * 100) if total_actual > 0 else 0
 
         # Revenue efficiency = actual revenue / potential revenue
         revenue_efficiency = (total_revenue / total_potential * 100) if total_potential > 0 else 0
 
-        # Cancellation rate
-        cancellation_rate = (total_cancellations / total_cust * 100) if total_cust > 0 else 0
+        # Customer leave rate (including those who left + cancelled orders)
+        leave_rate = (left / total_cust * 100) if total_cust > 0 else 0
 
-        # Average store accuracy
-        accuracy_ratios = []
-        for sid, s in stats.items():
-            if s.get('estimated_total', 0) > 0:
-                ratio = s.get('actual_total', 0) / s['estimated_total']
-                accuracy_ratios.append(ratio)
-        avg_accuracy = np.mean(accuracy_ratios) if accuracy_ratios else 1.0
-
-        # Fairness metric
+        # Fairness metric - standard deviation of exposures
         exp_vals = list(exposures.values()) if exposures else [0]
         fairness_std = np.std(exp_vals) if len(exp_vals) > 1 else 0
+        max_exp = max(exp_vals) if exp_vals else 1
+        fairness_normalized = (fairness_std / max_exp * 100) if max_exp > 0 else 0
 
-        # Customer satisfaction score (composite metric)
-        # Higher is better: penalized by leave rate and cancellation rate
-        leave_rate = (left / total_cust * 100) if total_cust > 0 else 0
-        satisfaction_score = max(0, 100 - leave_rate - (cancellation_rate * 2))
+        # =====================================================
+        # ALGORITHM SCORE - Composite metric for comparison
+        # =====================================================
+        # Formula: Weighted combination of key objectives
+        #
+        # Components (all normalized to 0-100 scale):
+        # 1. Revenue Performance (30%): How much potential revenue captured
+        # 2. Waste Reduction (30%): Inverse of waste rate
+        # 3. Customer Satisfaction (25%): Based on fulfillment and leave rates
+        # 4. Fairness (15%): How evenly stores are exposed
+        #
+        # Higher score = better algorithm performance
+
+        # Component 1: Revenue Performance (0-100)
+        revenue_score = revenue_efficiency  # Already 0-100
+
+        # Component 2: Waste Reduction (0-100)
+        waste_score = 100 - waste_rate  # Lower waste = higher score
+
+        # Component 3: Customer Satisfaction (0-100)
+        # Penalize for cancellations and customers leaving
+        satisfaction_score = max(0, 100 - leave_rate - (cancellation_rate * 1.5))
+
+        # Component 4: Fairness (0-100)
+        # Lower std deviation = higher fairness score
+        fairness_score = max(0, 100 - fairness_normalized)
+
+        # Weighted Algorithm Score
+        algorithm_score = (
+            0.30 * revenue_score +
+            0.30 * waste_score +
+            0.25 * satisfaction_score +
+            0.15 * fairness_score
+        )
 
         return {
-            'total_bags_sold': total_bags_sold,
-            'total_items_available': total_items_available,
-            'total_items_distributed': total_items_distributed,
-            'total_items_wasted': total_items_wasted,
-            'avg_items_per_bag': round(avg_items_per_bag, 2),
-            'total_revenue': round(total_revenue, 2),
-            'potential_revenue': round(total_potential, 2),
-            'revenue_efficiency': round(revenue_efficiency, 1),
+            # Core counts
+            'total_reservations': total_reservations,
+            'total_fulfilled': total_fulfilled,
+            'total_cancelled': total_cancelled,
+            'total_unsold': total_unsold,
+
+            # Rates
+            'fulfillment_rate': round(fulfillment_rate, 1),
+            'cancellation_rate': round(cancellation_rate, 1),
             'waste_rate': round(waste_rate, 1),
             'customer_leave_rate': round(leave_rate, 1),
+
+            # Revenue
+            'total_revenue': round(total_revenue, 2),
+            'total_lost_revenue': round(total_lost_revenue, 2),
+            'potential_revenue': round(total_potential, 2),
+            'revenue_efficiency': round(revenue_efficiency, 1),
+
+            # Fairness
             'fairness_std': round(fairness_std, 2),
-            'total_cancellations': total_cancellations,
-            'cancellation_rate': round(cancellation_rate, 2),
-            'avg_store_accuracy': round(avg_accuracy, 3),
-            'customer_satisfaction_score': round(satisfaction_score, 1)
+            'fairness_score': round(fairness_score, 1),
+
+            # Composite scores
+            'satisfaction_score': round(satisfaction_score, 1),
+            'algorithm_score': round(algorithm_score, 1),
+
+            # Legacy compatibility (for app.py charts)
+            'total_bags_sold': total_fulfilled,
+            'total_items_wasted': total_unsold,
+            'total_items_distributed': total_fulfilled,
+            'avg_items_per_bag': 1.0,  # Each reservation = 1 bag in this model
         }
 
     def _compile_accuracy_data(self):
