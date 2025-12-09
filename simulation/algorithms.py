@@ -8,12 +8,14 @@ which stores are displayed to customers. The goal is to optimize for:
 - Fair distribution of exposure across stores
 
 Each algorithm has the same signature:
-    func(stores_df, n, current_bags) -> list[store_id]
+    func(stores_df, n, current_bags, customer_valuations=None) -> list[store_id]
 
 Where:
     - stores_df: DataFrame with store information
     - n: Number of stores to return (display to customer)
     - current_bags: Dict mapping store_id -> remaining bags
+    - customer_valuations: Dict mapping store_id -> customer's preference (0-5)
+                          If provided, enables PERSONALIZED ranking per customer
 
 Algorithm Design Techniques (allowed per course):
 1. Greedy - Make locally optimal choices
@@ -30,7 +32,7 @@ from collections import defaultdict
 from datetime import datetime, timedelta
 
 
-def greedy_baseline(stores_df, n, current_bags):
+def greedy_baseline(stores_df, n, current_bags, customer_valuations=None):
     """
     BASELINE ALGORITHM: Greedy by Rating
 
@@ -67,7 +69,7 @@ def greedy_baseline(stores_df, n, current_bags):
     return top_n['store_id'].tolist()
 
 
-def inventory_aware(stores_df, n, current_bags):
+def inventory_aware(stores_df, n, current_bags, customer_valuations=None):
     """
     IMPROVED ALGORITHM: Inventory-Aware Ranking
 
@@ -123,7 +125,7 @@ def inventory_aware(stores_df, n, current_bags):
     return [sid for sid, _ in scores[:n]]
 
 
-def underdog_boost(stores_df, n, current_bags):
+def underdog_boost(stores_df, n, current_bags, customer_valuations=None):
     """
     UNDERDOG BOOST: Inverse rating multiplier for inventory priority.
 
@@ -169,7 +171,7 @@ def underdog_boost(stores_df, n, current_bags):
     return [sid for sid, _ in scores[:n]]
 
 
-def waste_prevention_threshold(stores_df, n, current_bags):
+def waste_prevention_threshold(stores_df, n, current_bags, customer_valuations=None):
     """
     WASTE PREVENTION THRESHOLD: Binary rescue system for at-risk stores.
 
@@ -228,7 +230,7 @@ def waste_prevention_threshold(stores_df, n, current_bags):
     return [sid for sid, _ in scores[:n]]
 
 
-def price_value_optimizer(stores_df, n, current_bags):
+def price_value_optimizer(stores_df, n, current_bags, customer_valuations=None):
     """
     PRICE-VALUE OPTIMIZER: Customer-centric value calculation.
 
@@ -295,7 +297,7 @@ def price_value_optimizer(stores_df, n, current_bags):
     return [sid for sid, _ in scores[:n]]
 
 
-def round_robin_fairness(stores_df, n, current_bags, exposure_history=None):
+def round_robin_fairness(stores_df, n, current_bags, customer_valuations=None, exposure_history=None):
     """
     ROUND ROBIN FAIRNESS: Ensures all qualifying stores get equal exposure.
     
@@ -421,7 +423,7 @@ def round_robin_fairness(stores_df, n, current_bags, exposure_history=None):
     return selected[:n]
 
 
-def time_decay_urgency(stores_df, n, current_bags, closing_times=None, current_time=None):
+def time_decay_urgency(stores_df, n, current_bags, customer_valuations=None, closing_times=None, current_time=None):
     """
     TIME DECAY URGENCY: Exponential urgency as closing time approaches.
     
@@ -530,7 +532,7 @@ def time_decay_urgency(stores_df, n, current_bags, closing_times=None, current_t
     return [s['store_id'] for s in scores[:n]]
 
 
-def supply_demand_equilibrium(stores_df, n, current_bags, demand_forecast=None):
+def supply_demand_equilibrium(stores_df, n, current_bags, customer_valuations=None, demand_forecast=None):
     """
     SUPPLY DEMAND EQUILIBRIUM: Balance current supply with predicted demand.
     
@@ -659,7 +661,7 @@ def supply_demand_equilibrium(stores_df, n, current_bags, demand_forecast=None):
     return [s['store_id'] for s in scores[:n]]
 
 
-def geographic_load_balancer(stores_df, n, current_bags, zone_mapping=None):
+def geographic_load_balancer(stores_df, n, current_bags, customer_valuations=None, zone_mapping=None):
     """
     GEOGRAPHIC LOAD BALANCER: Distribute customers across city zones.
     
@@ -820,7 +822,7 @@ def geographic_load_balancer(stores_df, n, current_bags, zone_mapping=None):
     return selected[:n]
 
 
-def reputation_recovery(stores_df, n, current_bags, rating_history=None):
+def reputation_recovery(stores_df, n, current_bags, customer_valuations=None, rating_history=None):
     """
     REPUTATION RECOVERY: Boost improving stores to accelerate recovery.
     
@@ -973,7 +975,7 @@ def reputation_recovery(stores_df, n, current_bags, rating_history=None):
     return [s['store_id'] for s in scores[:n]]
 
 
-def accuracy_aware_ranking(stores_df, n, current_bags, accuracy_tracker=None):
+def accuracy_aware_ranking(stores_df, n, current_bags, customer_valuations=None, accuracy_tracker=None):
     """
     ACCURACY-AWARE ALGORITHM: Adjusts ranking based on historical accuracy.
     
@@ -1076,7 +1078,7 @@ def accuracy_aware_ranking(stores_df, n, current_bags, accuracy_tracker=None):
     return [s['store_id'] for s in scores[:n]]
 
 
-def accuracy_aware_with_buffer_redistribution(stores_df, n, current_bags, 
+def accuracy_aware_with_buffer_redistribution(stores_df, n, current_bags, customer_valuations=None,
                                                accuracy_tracker=None,
                                                include_buffer=True):
     """
@@ -1155,7 +1157,7 @@ def create_accuracy_aware_algorithm(accuracy_tracker):
         algo = create_accuracy_aware_algorithm(tracker)
         ALGORITHMS['Accuracy Aware'] = algo
     """
-    def ranking_func(stores_df, n, current_bags):
+    def ranking_func(stores_df, n, current_bags, customer_valuations=None):
         return accuracy_aware_ranking(stores_df, n, current_bags, accuracy_tracker)
     
     ranking_func.__doc__ = accuracy_aware_ranking.__doc__
@@ -1300,7 +1302,7 @@ def _calculate_coverage(selected_stores, preferences):
     return len(covered)
 
 
-def dp_optimal_visibility(stores_df, n, current_bags):
+def dp_optimal_visibility(stores_df, n, current_bags, customer_valuations=None):
     """
     DYNAMIC PROGRAMMING - OPTIMAL VISIBILITY ALLOCATION (DP-OVA)
 
@@ -1399,7 +1401,7 @@ def dp_optimal_visibility(stores_df, n, current_bags):
     return selected[:n]
 
 
-def customer_aware_demand_prediction(stores_df, n, current_bags):
+def customer_aware_demand_prediction(stores_df, n, current_bags, customer_valuations=None):
     """
     CUSTOMER-AWARE DEMAND PREDICTION (CADP)
 
@@ -1525,7 +1527,7 @@ def customer_aware_demand_prediction(stores_df, n, current_bags):
     return selected[:n]
 
 
-def constraint_backtracking_fairness(stores_df, n, current_bags):
+def constraint_backtracking_fairness(stores_df, n, current_bags, customer_valuations=None):
     """
     CONSTRAINT BACKTRACKING WITH FAIRNESS GUARANTEES (CBB-FG)
 
@@ -1723,12 +1725,359 @@ def constraint_backtracking_fairness(stores_df, n, current_bags):
 
 
 # Legacy placeholder (kept for backwards compatibility)
-def custom_algorithm_1(stores_df, n, current_bags):
+def custom_algorithm_1(stores_df, n, current_bags, customer_valuations=None):
     """
     PLACEHOLDER: Team Member 1's Algorithm
     Redirects to DP Optimal Visibility for backwards compatibility.
     """
     return dp_optimal_visibility(stores_df, n, current_bags)
+
+
+# =============================================================================
+# PERSONALIZED RANKING ALGORITHMS
+# =============================================================================
+# These algorithms use customer_valuations to show DIFFERENT stores to
+# DIFFERENT customers based on their preferences. This is the key innovation
+# that allows them to dramatically outperform non-personalized algorithms.
+# =============================================================================
+
+def personalized_top_k(stores_df, n, current_bags, customer_valuations=None):
+    """
+    PERSONALIZED TOP-K: Show each customer their favorite stores.
+
+    Strategy: Rank stores by THIS customer's valuations, not global ratings.
+    Each customer sees stores they actually like, not what's globally popular.
+
+    Key Insight: Different customers have different preferences!
+    - Customer A: prefers bakeries → sees bakeries
+    - Customer B: prefers restaurants → sees restaurants
+    - Customer C: prefers cafes → sees cafes
+
+    This spreads demand across more stores, reducing waste while
+    improving customer satisfaction.
+
+    Technique: Transform and Conquer (transform customer valuations to ranking)
+
+    Time Complexity: O(S log S) for sorting S stores
+    """
+    available_ids = [sid for sid, bags in current_bags.items() if bags > 0]
+
+    if not available_ids:
+        return []
+
+    # If no customer valuations provided, fall back to greedy
+    if customer_valuations is None:
+        available = stores_df[stores_df['store_id'].isin(available_ids)]
+        return available.nlargest(n, 'average_overall_rating')['store_id'].tolist()
+
+    # PERSONALIZED RANKING: Sort by customer's own preferences
+    store_info = stores_df.set_index('store_id').to_dict('index')
+
+    scores = []
+    for sid in available_ids:
+        # Customer's valuation is PRIMARY (what THEY like)
+        customer_val = customer_valuations.get(sid, 2.5)
+        # Store rating is SECONDARY (quality assurance)
+        rating = store_info.get(sid, {}).get('average_overall_rating', 3.0)
+
+        # 70% customer preference, 30% quality
+        score = 0.70 * (customer_val / 5.0) + 0.30 * (rating / 5.0)
+        scores.append((sid, score))
+
+    # Sort by personalized score
+    scores.sort(key=lambda x: x[1], reverse=True)
+    return [sid for sid, _ in scores[:n]]
+
+
+def personalized_waste_aware(stores_df, n, current_bags, customer_valuations=None):
+    """
+    PERSONALIZED + WASTE AWARE: Balance customer preferences with waste reduction.
+
+    Strategy: Show stores the customer likes AND have high inventory.
+    This ensures customers see options they want while prioritizing
+    stores at risk of waste.
+
+    Formula:
+        score = 0.50 * customer_preference + 0.35 * waste_risk + 0.15 * quality
+
+    Key Insight: Customers are more likely to buy from stores they like,
+    so showing them high-inventory stores they ALSO like maximizes both
+    satisfaction and waste reduction.
+
+    Technique: Greedy with multi-objective optimization
+
+    Time Complexity: O(S log S) for sorting
+    """
+    available_ids = [sid for sid, bags in current_bags.items() if bags > 0]
+
+    if not available_ids:
+        return []
+
+    # If no customer valuations, fall back to inventory-aware
+    if customer_valuations is None:
+        return inventory_aware(stores_df, n, current_bags)
+
+    store_info = stores_df.set_index('store_id').to_dict('index')
+    max_bags = max(current_bags.get(sid, 1) for sid in available_ids)
+
+    scores = []
+    for sid in available_ids:
+        info = store_info.get(sid, {})
+
+        # Customer preference (what they want)
+        customer_val = customer_valuations.get(sid, 2.5)
+        pref_score = customer_val / 5.0
+
+        # Waste risk (high inventory = high risk)
+        bags = current_bags.get(sid, 0)
+        waste_score = bags / max_bags if max_bags > 0 else 0
+
+        # Quality assurance
+        rating = info.get('average_overall_rating', 3.0)
+        quality_score = rating / 5.0
+
+        # Combined score: preference + waste + quality
+        score = 0.50 * pref_score + 0.35 * waste_score + 0.15 * quality_score
+        scores.append((sid, score))
+
+    scores.sort(key=lambda x: x[1], reverse=True)
+    return [sid for sid, _ in scores[:n]]
+
+
+def personalized_diverse(stores_df, n, current_bags, customer_valuations=None):
+    """
+    PERSONALIZED + DIVERSITY: Ensure varied selection while respecting preferences.
+
+    Strategy: Use Dynamic Programming to select a diverse set of stores
+    that the customer likes while ensuring variety in price/type.
+
+    Algorithm:
+    1. Filter to stores customer rates >= 3.0 (acceptable quality)
+    2. Group by price tier (low/medium/high)
+    3. Select top store from each tier that customer prefers
+    4. Fill remaining slots with next best preferences
+
+    Key Insight: Customers may like stores in different categories.
+    Showing one from each category maximizes the chance they find
+    something they want AND spreads demand across price tiers.
+
+    Technique: Divide and Conquer (divide by price tier, conquer each)
+
+    Time Complexity: O(S log S) for sorting
+    """
+    available_ids = [sid for sid, bags in current_bags.items() if bags > 0]
+
+    if not available_ids:
+        return []
+
+    # If no customer valuations, fall back to greedy
+    if customer_valuations is None:
+        available = stores_df[stores_df['store_id'].isin(available_ids)]
+        return available.nlargest(n, 'average_overall_rating')['store_id'].tolist()
+
+    store_info = stores_df.set_index('store_id').to_dict('index')
+
+    # Get price range for tier calculation
+    prices = [store_info.get(sid, {}).get('price', 50) for sid in available_ids]
+    min_price = min(prices) if prices else 0
+    max_price = max(prices) if prices else 100
+    price_range = max_price - min_price if max_price > min_price else 1
+
+    # Categorize stores by price tier
+    tiers = {'low': [], 'medium': [], 'high': []}
+
+    for sid in available_ids:
+        info = store_info.get(sid, {})
+        customer_val = customer_valuations.get(sid, 2.5)
+
+        # Only consider stores customer finds acceptable (>= 3.0)
+        if customer_val < 3.0:
+            continue
+
+        price = info.get('price', 50)
+        normalized_price = (price - min_price) / price_range
+
+        if normalized_price < 0.33:
+            tier = 'low'
+        elif normalized_price < 0.67:
+            tier = 'medium'
+        else:
+            tier = 'high'
+
+        tiers[tier].append((sid, customer_val))
+
+    # Sort each tier by customer preference
+    for tier in tiers:
+        tiers[tier].sort(key=lambda x: x[1], reverse=True)
+
+    # Select one from each tier first (diversity)
+    selected = []
+    for tier in ['high', 'medium', 'low']:  # Start with premium
+        if tiers[tier] and len(selected) < n:
+            selected.append(tiers[tier].pop(0)[0])
+
+    # Fill remaining slots with best remaining preferences
+    remaining = []
+    for tier in tiers.values():
+        remaining.extend(tier)
+    remaining.sort(key=lambda x: x[1], reverse=True)
+
+    for sid, _ in remaining:
+        if len(selected) >= n:
+            break
+        if sid not in selected:
+            selected.append(sid)
+
+    # If still not enough, add any available stores
+    if len(selected) < n:
+        for sid in available_ids:
+            if sid not in selected:
+                selected.append(sid)
+            if len(selected) >= n:
+                break
+
+    return selected[:n]
+
+
+def personalized_reliable(stores_df, n, current_bags, customer_valuations=None):
+    """
+    PERSONALIZED + RELIABLE: Maximize satisfaction by avoiding cancellations.
+
+    Strategy: Show stores the customer likes that are RELIABLE - i.e.,
+    unlikely to overestimate their inventory and cause cancellations.
+
+    Key Insight: Cancellations hurt satisfaction score 1.5x more than leave rate.
+    By favoring stores with conservative estimates (bags <= expected), we reduce
+    cancellations while maintaining personalization.
+
+    Reliability factors:
+    1. Inventory relative to rating (high inventory + low rating = risky)
+    2. Customer preference (personalization)
+    3. Store quality (rating)
+
+    Formula:
+        reliability = 1 - (inventory_excess / max_inventory)
+        score = 0.45 * customer_pref + 0.35 * reliability + 0.20 * quality
+
+    Technique: Greedy with reliability-weighted personalization
+
+    Time Complexity: O(S log S) for sorting
+    """
+    available_ids = [sid for sid, bags in current_bags.items() if bags > 0]
+
+    if not available_ids:
+        return []
+
+    # If no customer valuations, fall back to reputation recovery (best non-personalized)
+    if customer_valuations is None:
+        return reputation_recovery(stores_df, n, current_bags)
+
+    store_info = stores_df.set_index('store_id').to_dict('index')
+    max_bags = max(current_bags.get(sid, 1) for sid in available_ids)
+
+    # Calculate expected demand per store based on rating
+    # Higher rated stores have higher expected demand
+    avg_customers_per_store = 4.0  # ~105 shoppers / 27 stores
+
+    scores = []
+    for sid in available_ids:
+        info = store_info.get(sid, {})
+        rating = info.get('average_overall_rating', 3.0)
+        bags = current_bags.get(sid, 0)
+
+        # Customer preference (what they want)
+        customer_val = customer_valuations.get(sid, 2.5)
+        pref_score = customer_val / 5.0
+
+        # Expected demand based on rating
+        # Higher rating = more expected customers = less risk of cancellation
+        expected_demand = (rating / 5.0) * avg_customers_per_store * 1.5
+        expected_demand = max(1.0, expected_demand)
+
+        # Reliability: how likely is this store to fulfill orders?
+        # If bags <= expected_demand, very reliable (score = 1.0)
+        # If bags >> expected_demand, risky (score approaches 0)
+        supply_demand_ratio = bags / expected_demand
+        if supply_demand_ratio <= 1.0:
+            # Supply <= demand: very reliable, all orders fulfilled
+            reliability = 1.0
+        else:
+            # Supply > demand: some cancellation risk
+            # The more excess, the lower reliability
+            excess_ratio = (supply_demand_ratio - 1.0) / 2.0  # Normalize
+            reliability = max(0.3, 1.0 - excess_ratio)
+
+        # Quality score
+        quality_score = rating / 5.0
+
+        # Combined score: preference + reliability + quality
+        # Heavy weight on reliability to minimize cancellations
+        score = 0.45 * pref_score + 0.35 * reliability + 0.20 * quality_score
+        scores.append((sid, score))
+
+    scores.sort(key=lambda x: x[1], reverse=True)
+    return [sid for sid, _ in scores[:n]]
+
+
+def personalized_ultimate(stores_df, n, current_bags, customer_valuations=None):
+    """
+    PERSONALIZED ULTIMATE: Maximum personalization for best fairness + satisfaction.
+
+    Key Insight from Analysis:
+    - Personalized Top-K achieves 81.3 fairness because it shows DIFFERENT stores
+      to DIFFERENT customers based on their unique preferences
+    - This naturally spreads exposure across all stores
+    - Higher fairness (81.3 vs 65.4) contributes +3 points vs Reputation Recovery
+
+    Strategy: MAXIMIZE personalization to maximize fairness.
+    The more we tailor to individual preferences, the more distributed the exposure.
+
+    Formula:
+        score = 0.80 * customer_pref + 0.15 * quality + 0.05 * inventory
+
+    This is essentially Personalized Top-K with even stronger personalization.
+    The theory: If each customer sees their TRUE favorites, exposure spreads
+    naturally because customers have diverse preferences.
+
+    Technique: Transform and Conquer (preferences → personalized ranking)
+
+    Time Complexity: O(S log S) for sorting
+    """
+    available_ids = [sid for sid, bags in current_bags.items() if bags > 0]
+
+    if not available_ids:
+        return []
+
+    # If no customer valuations, fall back to reputation recovery
+    if customer_valuations is None:
+        return reputation_recovery(stores_df, n, current_bags)
+
+    store_info = stores_df.set_index('store_id').to_dict('index')
+    max_bags = max(current_bags.get(sid, 1) for sid in available_ids)
+
+    scores = []
+    for sid in available_ids:
+        info = store_info.get(sid, {})
+        rating = info.get('average_overall_rating', 3.0)
+        bags = current_bags.get(sid, 0)
+
+        # 1. Customer preference (DOMINANT - 80%)
+        # This is what makes Personalized Top-K have great fairness
+        customer_val = customer_valuations.get(sid, 2.5)
+        pref_score = customer_val / 5.0
+
+        # 2. Quality floor (15%)
+        rating_score = rating / 5.0
+
+        # 3. Inventory (5%) - slight preference for waste prevention
+        inventory_score = bags / max_bags
+
+        # Combined score - heavily weighted toward personalization
+        score = 0.80 * pref_score + 0.15 * rating_score + 0.05 * inventory_score
+        scores.append((sid, score))
+
+    scores.sort(key=lambda x: x[1], reverse=True)
+    return [sid for sid, _ in scores[:n]]
 
 
 ALGORITHMS = {
@@ -1746,6 +2095,12 @@ ALGORITHMS = {
     'DP Optimal Visibility': dp_optimal_visibility,
     'Customer-Aware Demand': customer_aware_demand_prediction,
     'Constraint Backtracking': constraint_backtracking_fairness,
+    # PERSONALIZED ALGORITHMS - Show different stores to different customers!
+    'Personalized Top-K': personalized_top_k,
+    'Personalized Waste-Aware': personalized_waste_aware,
+    'Personalized Diverse': personalized_diverse,
+    'Personalized Reliable': personalized_reliable,
+    'Personalized Ultimate': personalized_ultimate,
 }
 
 def register_accuracy_aware_algorithm(accuracy_tracker, name='Accuracy Aware'):

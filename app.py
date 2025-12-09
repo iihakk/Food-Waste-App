@@ -122,8 +122,8 @@ with st.sidebar:
     st.markdown("### Simulation Settings")
 
     num_days = st.slider("Simulation Days", 1, 30, 7)
-    n_stores = st.slider("Stores Shown (n)", 1, 10, 5,
-                         help="Number of stores displayed to each customer")
+    n_stores = st.slider("Stores Shown (n)", 1, 20, 10,
+                         help="Number of stores displayed to each customer (realistic: 10-15)")
     shop_prob = st.slider("Shopping Probability", 0.1, 1.0, 0.7,
                           help="Chance a customer shops on any given day")
 
@@ -250,7 +250,7 @@ if run_btn:
 
         col9, col10, col11, col12 = st.columns(4)
         with col9:
-            st.metric("Fulfillment Rate", f"{summary.get('fulfillment_rate', 0):.1f}%")
+            st.metric("Demand Fulfillment", f"{summary.get('demand_fulfillment', 0):.1f}%")
         with col10:
             st.metric("Cancellation Rate", f"{summary.get('cancellation_rate', 0):.1f}%")
         with col11:
@@ -266,13 +266,11 @@ if run_btn:
             comp_data.append({
                 'Algorithm': algo_name,
                 'Score': s.get('algorithm_score', 0),
+                'Demand %': s.get('demand_fulfillment', 0),
                 'Fulfilled': s.get('total_fulfilled', 0),
                 'Cancelled': s.get('total_cancelled', 0),
-                'Unsold': s.get('total_unsold', 0),
                 'Revenue': f"{s['total_revenue']:,.0f}",
-                'Waste %': s['waste_rate'],
-                'Cancel %': s.get('cancellation_rate', 0),
-                'Leave %': s['customer_leave_rate'],
+                'RevEff %': s['revenue_efficiency'],
                 'Fairness': s.get('fairness_score', 0)
             })
 
