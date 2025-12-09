@@ -148,18 +148,24 @@ with st.sidebar:
     randomize = st.checkbox("Randomize each run", value=False,
                            help="If unchecked, results are reproducible")
 
+    # Show data generation sliders when randomize is enabled
+    if randomize:
+        st.markdown("---")
+        st.markdown("### Random Data Generation")
+        num_stores_gen = st.slider("Number of Stores", 10, 1000, 100,
+                                   help="Number of stores to generate (supports up to 1000)")
+        num_customers_gen = st.slider("Number of Customers", 100, 10000, 1000,
+                                      help="Number of customers to generate (supports up to 10000)")
+    else:
+        num_stores_gen = 10
+        num_customers_gen = 150
+
     st.markdown("---")
     st.markdown("### Data Source")
 
     use_sample = st.checkbox("Use sample data", value=True)
 
-    if use_sample:
-        data_dir = os.path.join(os.path.dirname(__file__), 'data')
-        stores_path = os.path.join(data_dir, 'stores.csv')
-        customers_path = os.path.join(data_dir, 'customers.csv')
-        if not os.path.exists(stores_path):
-            generate_sample_data(data_dir)
-    else:
+    if not use_sample:
         stores_file = st.file_uploader("stores.csv", type='csv')
         customers_file = st.file_uploader("customers.csv", type='csv')
 
@@ -172,11 +178,28 @@ if run_btn:
         st.error("Please select at least one algorithm")
         st.stop()
 
+    import time
+    
     # Load data
     if use_sample:
-        if not os.path.exists(stores_path):
-            generate_sample_data(data_dir)
-        stores, customers = load_data(stores_path, customers_path)
+        data_dir = os.path.join(os.path.dirname(__file__), 'data')
+        
+        # If randomize is enabled, generate fresh random data with custom sizes
+        if randomize:
+            run_seed = int(time.time() * 1000) % 100000
+            with st.spinner(f"Generating {num_stores_gen} stores and {num_customers_gen} customers..."):
+                stores, customers = generate_sample_data(
+                    data_dir, 
+                    seed=run_seed,
+                    num_stores=num_stores_gen,
+                    num_customers=num_customers_gen
+                )
+        else:
+            stores_path = os.path.join(data_dir, 'stores.csv')
+            customers_path = os.path.join(data_dir, 'customers.csv')
+            if not os.path.exists(stores_path):
+                generate_sample_data(data_dir)
+            stores, customers = load_data(stores_path, customers_path)
     else:
         if stores_file and customers_file:
             stores = pd.read_csv(stores_file)
@@ -190,7 +213,6 @@ if run_btn:
         results = {}
         progress = st.progress(0)
 
-        import time
         seed = None if randomize else 42
 
         for i, algo_name in enumerate(selected_algos):
