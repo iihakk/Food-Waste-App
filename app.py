@@ -157,11 +157,17 @@ with st.sidebar:
         data_dir = os.path.join(os.path.dirname(__file__), 'data')
         stores_path = os.path.join(data_dir, 'stores.csv')
         customers_path = os.path.join(data_dir, 'customers.csv')
-        if not os.path.exists(stores_path):
-            generate_sample_data(data_dir)
+        
+        st.markdown("#### Data Size")
+        num_stores = st.slider("Number of Stores", min_value=10, max_value=500, value=200, step=10,
+                              help="Number of stores to generate")
+        num_customers = st.slider("Number of Customers", min_value=100, max_value=2000, value=500, step=50,
+                                 help="Number of customers to generate")
     else:
         stores_file = st.file_uploader("stores.csv", type='csv')
         customers_file = st.file_uploader("customers.csv", type='csv')
+        num_stores = 200  # Default values when using uploaded files
+        num_customers = 500
 
     st.markdown("---")
     run_btn = st.button("Run Simulation", type="primary", use_container_width=True)
@@ -174,8 +180,9 @@ if run_btn:
 
     # Load data
     if use_sample:
-        if not os.path.exists(stores_path):
-            generate_sample_data(data_dir)
+        # Generate new random data only if randomize is checked, otherwise use existing
+        if randomize or not os.path.exists(stores_path):
+            generate_sample_data(data_dir, num_stores=num_stores, num_customers=num_customers)
         stores, customers = load_data(stores_path, customers_path)
     else:
         if stores_file and customers_file:

@@ -1,28 +1,501 @@
 store_id,store_name,branch,average_bags_at_9AM,average_overall_rating,price,longitude,latitude
-100,TBS,Zamalek,18,3.4,42.91,31.2194,30.0626
-101,Dunkin,New Cairo,21,4.1,41.94,31.4913,30.0171
-102,Costa Coffee,Maadi,22,3.2,39.14,31.2625,29.9602
-103,Starbucks,Heliopolis,27,4.5,32.95,31.3375,30.0911
-104,Paul,Mohandessin,8,4.4,50.55,31.2001,30.0561
-105,TBS,New Cairo,10,3.6,54.43,31.4701,30.0285
-106,Cilantro,Zamalek,17,4.3,38.5,31.2243,30.0651
-107,Beano's,Maadi,12,4.2,40.77,31.2587,29.9711
-108,Harris Cafe,Heliopolis,14,4.5,72.16,31.3421,30.0875
-109,Dunkin,Mohandessin,5,4.3,66.09,31.2056,30.0512
-110,La Poire,Heliopolis,25,4.6,55.00,31.3412,30.0891
-111,La Poire,Zamalek,20,4.5,58.00,31.2231,30.0638
-112,La Poire,Maadi,18,4.4,52.00,31.2598,29.9685
-113,El Abd,Downtown,30,4.2,35.00,31.2389,30.0456
-114,El Abd,Maadi,22,4.0,38.00,31.2612,29.9623
-115,Mandarine Koueider,Zamalek,15,4.7,65.00,31.2218,30.0612
-116,Mandarine Koueider,Heliopolis,12,4.6,62.00,31.3398,30.0856
-117,Etoile,Heliopolis,20,4.3,48.00,31.3356,30.0878
-118,Etoile,Maadi,16,4.2,45.00,31.2645,29.9645
-119,Simonds,Zamalek,14,4.1,42.00,31.2267,30.0589
-120,Simonds,New Cairo,18,4.0,40.00,31.4823,30.0234
-121,Dukes,Mohandessin,12,3.9,38.00,31.2034,30.0534
-122,Dukes,Maadi,10,3.8,36.00,31.2567,29.9678
-123,Nola Cupcakes,Zamalek,8,4.4,55.00,31.2189,30.0667
-124,Nola Cupcakes,New Cairo,10,4.3,52.00,31.4756,30.0198
-125,Patchi,Heliopolis,6,4.5,85.00,31.3389,30.0912
-126,Patchi,Maadi,5,4.4,82.00,31.2634,29.9634
+1,Paul,New Cairo,8,4.7,45.0,31.453,30.004
+2,Simonds,Nasr City,39,2.7,88.83,31.3551,30.0526
+3,Bake Rolz,Sheikh Zayed,23,3.4,92.52,30.9613,30.0178
+4,Harris Cafe,Maadi,35,4.1,38.22,31.2702,29.9646
+5,Fresh Food,Tagamoa,25,4.3,78.41,31.4403,29.9991
+6,Dipndip,Dokki,36,2.7,56.4,31.2088,30.0462
+7,Le Chantilly,Nasr City,30,4.0,77.48,31.3482,30.0705
+8,Bake Rolz,Heliopolis,37,4.5,53.17,31.3447,30.1084
+9,La Poire,Rehab,35,3.0,69.96,31.4897,30.0627
+10,Fresh Food,Mohandessin,22,3.7,85.61,31.2013,30.0434
+11,Lychee,Zamalek,37,4.8,41.33,31.2243,30.0524
+12,Cake Maison,Heliopolis,25,4.6,58.48,31.3363,30.0809
+13,Marble Slab,Downtown,8,4.0,43.63,31.2549,30.0516
+14,Cake Maison,Nasr City,23,3.9,53.36,31.3473,30.0597
+15,Gourmet,Downtown,15,2.7,45.42,31.253,30.0478
+16,Etoile,Mohandessin,6,4.5,76.29,31.1935,30.0504
+17,Cinnabon,Sheikh Zayed,10,4.1,76.6,30.9778,30.0234
+18,Krispy Kreme,Sheikh Zayed,36,2.9,81.65,30.9324,30.0266
+19,Simonds,Tagamoa,12,4.2,70.14,31.4704,30.0257
+20,Fresh Food,Tagamoa,14,3.1,48.39,31.4222,29.9948
+21,TBS,Maadi,18,2.8,95.07,31.2566,29.955
+22,La Poire,Mohandessin,32,4.6,97.48,31.2011,30.0459
+23,Bisco Misr,Rehab,18,3.6,25.49,31.5053,30.0559
+24,Bisco Misr,Downtown,37,4.1,45.34,31.2487,30.0515
+25,Dunkin,Nasr City,19,2.7,47.08,31.329,30.073
+26,Patchi,Maadi,26,2.8,56.65,31.255,29.9578
+27,Breadwinner,Shoubra,16,4.0,51.26,31.2583,30.0978
+28,Auntie Anne's,Maadi,35,4.1,67.18,31.2414,29.9498
+29,TBS,New Cairo,28,3.2,68.53,31.508,30.0425
+30,Tutti Frutti,Sheikh Zayed,13,3.0,34.49,30.9488,30.0378
+31,Costa Coffee,New Cairo,40,4.7,54.09,31.4884,30.0138
+32,Marble Slab,6th October,19,2.9,31.91,30.9048,29.9409
+33,Auntie Anne's,Mohandessin,35,4.8,85.06,31.2003,30.0514
+34,Cilantro,Korba,34,4.9,30.89,31.3213,30.0955
+35,Mandarine Koueider,Shoubra,32,4.5,97.44,31.2403,30.0864
+36,Harris Cafe,Sheikh Zayed,25,4.7,37.92,30.9226,30.0093
+37,Le Chantilly,Tagamoa,14,3.8,53.12,31.4242,30.0088
+38,Fresh Food,Korba,36,2.7,92.38,31.3224,30.0859
+39,Paul,New Cairo,8,3.1,30.11,31.4953,29.9979
+40,Costa Coffee,Tagamoa,10,4.1,74.88,31.4673,29.9905
+41,Harris Cafe,Shoubra,7,3.1,80.51,31.2534,30.0887
+42,Cookiedoodle,Sheikh Zayed,27,4.8,91.69,30.9263,30.0395
+43,Etoile,Heliopolis,11,3.0,95.91,31.3401,30.0919
+44,El Abd,Dokki,6,4.4,44.17,31.2055,30.0326
+45,House of Donuts,Nasr City,23,2.6,54.89,31.3296,30.065
+46,Breadwinner,Dokki,8,3.3,81.55,31.2019,30.0392
+47,Cake Maison,Heliopolis,16,3.1,83.1,31.3346,30.1033
+48,Etoile,Korba,24,2.5,42.14,31.3268,30.0915
+49,Baskin Robbins,Dokki,13,4.1,53.67,31.2101,30.0317
+50,Gourmet,Korba,16,2.7,72.17,31.3244,30.0918
+51,Simonds,Heliopolis,14,2.6,85.93,31.3256,30.0951
+52,Cake Maison,6th October,11,4.3,51.22,30.9554,29.9218
+53,Bake Rolz,Rehab,18,4.9,36.99,31.5147,30.068
+54,Beano's,Korba,32,4.7,28.47,31.3294,30.0882
+55,Nola Cupcakes,Dokki,11,4.8,75.04,31.2009,30.0322
+56,Costa Coffee,Sheikh Zayed,26,3.8,40.79,30.9331,30.0333
+57,Marble Slab,Rehab,13,3.4,97.23,31.4994,30.0532
+58,Breadwinner,Nasr City,33,3.1,93.72,31.3489,30.0661
+59,Cookiedoodle,Mohandessin,5,4.7,40.97,31.2082,30.046
+60,Simonds,Zamalek,32,3.2,66.33,31.2135,30.0662
+61,Le Chantilly,Heliopolis,7,3.3,57.38,31.3386,30.1031
+62,Cold Stone,Mohandessin,23,3.1,94.71,31.1998,30.0542
+63,Costa Coffee,Dokki,7,4.7,36.67,31.2003,30.0488
+64,La Poire,Tagamoa,11,2.6,73.35,31.4729,30.0078
+65,House of Donuts,Sheikh Zayed,23,2.8,73.08,30.947,30.0127
+66,Bisco Misr,Heliopolis,28,2.8,50.46,31.3345,30.1003
+67,Cinnabon,Giza,33,3.7,77.28,31.2102,30.0128
+68,Cold Stone,Rehab,38,4.1,98.56,31.4994,30.0583
+69,Cake Maison,Heliopolis,13,4.5,67.91,31.343,30.0949
+70,Harris Cafe,Mohandessin,13,4.0,64.87,31.2043,30.0689
+71,Paul,Dokki,34,4.0,90.02,31.2159,30.0414
+72,Gourmet,Rehab,39,4.5,79.83,31.5036,30.07
+73,Harris Cafe,Shoubra,5,4.5,78.93,31.2302,30.0908
+74,Cinnabon,Sheikh Zayed,8,4.0,56.86,30.9378,30.0261
+75,Cinnabon,Nasr City,6,3.5,60.8,31.3517,30.0638
+76,House of Donuts,Nasr City,10,4.7,51.23,31.3389,30.0633
+77,Etoile,6th October,30,4.2,35.51,30.9663,29.9714
+78,Fresh Food,Shoubra,18,3.2,35.99,31.232,30.0737
+79,Cake Maison,Downtown,11,2.6,41.11,31.232,30.0562
+80,Cake Maison,Downtown,20,2.5,86.27,31.2404,30.0522
+81,Lychee,Sheikh Zayed,12,2.9,78.53,30.9288,30.0092
+82,Tutti Frutti,Mohandessin,30,4.5,82.87,31.2031,30.0502
+83,Beano's,Korba,37,2.5,41.31,31.3292,30.0856
+84,El Abd,Tagamoa,24,2.6,49.95,31.4427,29.9907
+85,Baskin Robbins,Downtown,37,4.2,38.51,31.2443,30.0431
+86,Le Chantilly,Giza,31,4.2,81.8,31.1964,30.0063
+87,Harris Cafe,New Cairo,18,4.2,87.55,31.4836,30.0092
+88,Baskin Robbins,Mohandessin,35,4.9,65.88,31.2072,30.0446
+89,El Abd,Downtown,35,3.9,50.54,31.256,30.057
+90,Auntie Anne's,Dokki,12,3.1,40.9,31.2,30.0471
+91,Lychee,Dokki,31,2.7,42.39,31.2144,30.0473
+92,Cinnabon,Shoubra,35,4.4,78.02,31.2482,30.0805
+93,Le Chantilly,Maadi,11,3.4,47.76,31.259,29.9705
+94,Cilantro,Mohandessin,25,5.0,26.33,31.1973,30.0689
+95,Starbucks,Zamalek,19,3.2,28.19,31.2121,30.0521
+96,House of Donuts,Rehab,10,3.7,41.69,31.4997,30.0628
+97,Harris Cafe,Giza,36,3.8,89.78,31.216,30.0148
+98,Dunkin,Nasr City,22,2.7,51.42,31.3332,30.0559
+99,House of Donuts,Giza,18,3.0,84.67,31.2194,30.0021
+100,Cinnabon,Nasr City,18,4.4,93.13,31.3576,30.0551
+101,Etoile,Downtown,22,3.1,46.13,31.2444,30.0599
+102,Bake Rolz,Rehab,8,4.5,93.42,31.5133,30.0457
+103,Lychee,Downtown,33,3.9,32.77,31.2512,30.0513
+104,Auntie Anne's,Giza,30,3.6,36.62,31.2198,30.0108
+105,Beano's,Tagamoa,14,3.8,99.11,31.4311,30.0112
+106,Costa Coffee,Dokki,9,4.6,77.01,31.2007,30.0497
+107,Bisco Misr,Giza,34,5.0,97.01,31.2118,30.013
+108,Bake Rolz,Tagamoa,14,3.1,84.68,31.4348,30.0193
+109,Dipndip,Heliopolis,9,5.0,52.47,31.3424,30.0818
+110,Bake Rolz,Giza,40,3.3,56.83,31.208,30.0168
+111,Costa Coffee,Dokki,32,4.4,36.27,31.2006,30.0474
+112,Le Chantilly,6th October,33,2.8,93.51,30.9752,29.9487
+113,Beano's,Korba,23,4.4,46.07,31.3348,30.0976
+114,Tutti Frutti,Maadi,24,4.5,73.84,31.2687,29.9407
+115,Beano's,6th October,40,3.4,78.1,30.8989,29.9395
+116,Lychee,New Cairo,40,2.8,68.6,31.4692,30.0036
+117,Le Chantilly,Shoubra,30,4.7,34.43,31.2352,30.0706
+118,Paul,Downtown,24,2.8,99.3,31.2554,30.0468
+119,Breadwinner,Dokki,28,3.0,26.32,31.2138,30.0289
+120,Cilantro,New Cairo,8,4.5,95.07,31.4492,30.0329
+121,Cookiedoodle,Downtown,33,2.8,62.48,31.2448,30.049
+122,Paul,Sheikh Zayed,19,4.3,77.68,30.9384,30.0013
+123,Dunkin,Korba,36,2.9,55.38,31.3244,30.0805
+124,Fresh Food,Rehab,36,3.6,44.24,31.4849,30.0684
+125,Krispy Kreme,Mohandessin,37,2.7,44.64,31.2044,30.0412
+126,Bisco Misr,Nasr City,21,3.3,69.77,31.3361,30.0725
+127,Simonds,6th October,31,5.0,61.2,30.9337,29.9527
+128,Bake Rolz,Sheikh Zayed,21,2.5,83.12,30.9281,30.0031
+129,Breadwinner,Sheikh Zayed,40,3.8,64.09,30.9216,30.0172
+130,Starbucks,Shoubra,35,2.6,43.33,31.254,30.0772
+131,Tutti Frutti,Zamalek,18,2.8,53.75,31.2186,30.0567
+132,Paul,Tagamoa,30,3.4,78.77,31.4661,30.0007
+133,Bake Rolz,Maadi,37,4.0,92.29,31.2691,29.971
+134,Fresh Food,Zamalek,25,2.9,28.66,31.2227,30.0522
+135,Krispy Kreme,6th October,6,2.5,82.78,30.9093,29.9382
+136,Tutti Frutti,Korba,30,2.8,39.14,31.326,30.0819
+137,Auntie Anne's,Zamalek,27,3.7,25.55,31.2211,30.0693
+138,Bake Rolz,Shoubra,39,3.5,91.64,31.2545,30.0959
+139,Bisco Misr,Dokki,6,4.1,41.69,31.2044,30.0259
+140,Tutti Frutti,Korba,20,4.4,28.33,31.3292,30.0857
+141,Lychee,Giza,36,4.1,57.82,31.2188,29.994
+142,Bisco Misr,Dokki,37,2.9,95.68,31.2013,30.0328
+143,Beano's,Maadi,18,3.3,99.48,31.2708,29.9719
+144,Cilantro,Tagamoa,21,3.2,77.68,31.4245,30.003
+145,Bake Rolz,Nasr City,10,4.4,96.84,31.3274,30.0615
+146,Tutti Frutti,6th October,21,4.5,95.8,30.975,29.9732
+147,Harris Cafe,New Cairo,24,3.9,99.94,31.489,29.9988
+148,Baskin Robbins,6th October,24,2.5,39.39,30.9472,29.9595
+149,Dukes,Nasr City,25,3.2,43.77,31.3475,30.0505
+150,Lychee,Zamalek,27,4.4,70.85,31.2241,30.0574
+151,Auntie Anne's,Giza,27,4.9,96.82,31.2102,29.9937
+152,House of Donuts,Heliopolis,25,4.1,57.8,31.3453,30.0976
+153,Nola Cupcakes,Korba,5,3.0,46.02,31.3359,30.0802
+154,Gourmet,Nasr City,19,4.3,95.51,31.3505,30.0557
+155,Patchi,Downtown,29,2.8,48.03,31.2406,30.0551
+156,Dukes,Dokki,26,4.4,89.72,31.2102,30.037
+157,Baskin Robbins,Shoubra,12,2.7,40.12,31.2557,30.0905
+158,Paul,Heliopolis,20,4.2,52.02,31.3454,30.102
+159,El Abd,Nasr City,38,4.2,50.87,31.3294,30.0766
+160,Cookiedoodle,Nasr City,8,3.2,38.31,31.3268,30.0646
+161,Cookiedoodle,Heliopolis,24,2.7,48.93,31.3301,30.0841
+162,Tutti Frutti,Giza,27,3.2,92.93,31.2032,30.0056
+163,Dunkin,Sheikh Zayed,28,2.7,90.25,30.9731,30.0268
+164,Nola Cupcakes,Zamalek,36,4.7,90.42,31.2224,30.0637
+165,Le Chantilly,Nasr City,40,3.4,66.59,31.3469,30.0724
+166,Bisco Misr,Downtown,7,3.7,89.02,31.2576,30.0435
+167,Gourmet,Tagamoa,30,4.1,42.69,31.4257,30.0043
+168,Auntie Anne's,Downtown,16,4.0,41.0,31.2579,30.0417
+169,Cake Maison,Downtown,35,4.8,94.69,31.2534,30.0587
+170,Cinnabon,Sheikh Zayed,31,4.9,57.14,30.9763,30.0388
+171,Simonds,Nasr City,36,3.8,77.77,31.3172,30.0663
+172,Auntie Anne's,Tagamoa,15,4.1,38.69,31.427,29.995
+173,Starbucks,Maadi,11,4.5,38.69,31.2476,29.9761
+174,Le Chantilly,Shoubra,6,2.9,42.43,31.2559,30.0973
+175,Nola Cupcakes,New Cairo,13,4.2,25.23,31.5021,29.9994
+176,Starbucks,Korba,13,4.5,59.48,31.3292,30.0904
+177,Baskin Robbins,Downtown,5,4.5,47.6,31.2409,30.0429
+178,El Abd,Sheikh Zayed,30,2.9,58.43,30.928,30.0271
+179,Harris Cafe,Tagamoa,20,3.8,28.47,31.4594,30.0188
+180,House of Donuts,Shoubra,12,3.3,77.79,31.2573,30.0787
+181,El Abd,Giza,8,3.9,55.42,31.1915,29.9952
+182,Cold Stone,Tagamoa,30,3.5,48.64,31.4261,30.0138
+183,El Abd,Nasr City,9,3.1,68.33,31.351,30.0727
+184,Cilantro,Giza,16,3.5,83.42,31.2017,30.0008
+185,Dukes,Heliopolis,15,4.7,68.24,31.3309,30.0882
+186,Simonds,Zamalek,32,2.7,28.3,31.2225,30.0689
+187,Beano's,Dokki,14,4.5,42.38,31.2077,30.0393
+188,House of Donuts,Tagamoa,38,4.9,81.66,31.449,30.0217
+189,House of Donuts,Heliopolis,27,3.8,31.95,31.3344,30.1027
+190,Auntie Anne's,Giza,19,3.5,84.89,31.197,29.9983
+191,Harris Cafe,Shoubra,37,3.6,33.38,31.2395,30.0928
+192,Baskin Robbins,Shoubra,13,4.2,84.89,31.2385,30.0847
+193,La Poire,Nasr City,20,4.6,50.06,31.3158,30.0728
+194,Beano's,Maadi,30,2.7,61.09,31.2563,29.9736
+195,Etoile,Rehab,12,4.3,38.64,31.4966,30.0731
+196,Patchi,Shoubra,34,4.3,65.09,31.2376,30.0803
+197,Etoile,New Cairo,30,4.0,79.51,31.493,30.0046
+198,Harris Cafe,New Cairo,15,4.2,41.84,31.4971,30.0142
+199,Beano's,Dokki,11,4.8,64.34,31.2042,30.0356
+200,Bake Rolz,Zamalek,9,4.0,99.12,31.2277,30.0518
+201,Dunkin,Mohandessin,20,4.6,95.97,31.1983,30.0436
+202,House of Donuts,Rehab,5,4.6,69.36,31.5004,30.0427
+203,Dunkin,Sheikh Zayed,13,4.5,99.96,30.9243,30.0135
+204,Harris Cafe,Heliopolis,38,3.8,89.2,31.3485,30.1012
+205,Fresh Food,Mohandessin,26,2.8,94.33,31.1925,30.065
+206,El Abd,Heliopolis,9,2.6,67.27,31.3542,30.0966
+207,Costa Coffee,Shoubra,17,5.0,87.24,31.2533,30.0877
+208,Cinnabon,Dokki,26,3.5,80.62,31.2067,30.0448
+209,Marble Slab,Shoubra,39,4.7,97.74,31.2468,30.0977
+210,Cake Maison,Sheikh Zayed,9,3.4,43.03,30.9328,30.0126
+211,Simonds,Dokki,39,4.2,73.01,31.2025,30.0452
+212,Cookiedoodle,New Cairo,16,4.2,82.98,31.5076,30.0034
+213,Marble Slab,Zamalek,22,3.0,56.89,31.2163,30.0521
+214,Paul,Downtown,32,4.8,87.53,31.2394,30.0404
+215,Baskin Robbins,Mohandessin,15,4.2,42.28,31.1946,30.0646
+216,Costa Coffee,Tagamoa,23,4.2,63.88,31.4768,30.0215
+217,Cookiedoodle,Rehab,36,3.3,41.9,31.505,30.0739
+218,Le Chantilly,Korba,26,4.2,96.64,31.3207,30.0801
+219,Nola Cupcakes,Dokki,16,2.6,71.39,31.2073,30.0493
+220,Marble Slab,Dokki,21,4.8,37.28,31.2189,30.0206
+221,Bake Rolz,Zamalek,36,3.7,36.49,31.2287,30.0531
+222,Lychee,Tagamoa,37,2.5,29.77,31.4799,29.9989
+223,Cold Stone,Rehab,25,3.7,95.05,31.4926,30.0704
+224,Costa Coffee,6th October,27,2.7,57.99,30.9572,29.9558
+225,Bake Rolz,Heliopolis,19,3.5,36.81,31.3508,30.0928
+226,Auntie Anne's,6th October,6,4.5,63.17,30.9455,29.9357
+227,Tutti Frutti,Giza,6,4.3,58.75,31.2096,29.9912
+228,Edita,Mohandessin,19,2.5,95.13,31.1967,30.0544
+229,Tutti Frutti,Tagamoa,30,3.6,29.78,31.4754,29.9973
+230,Le Chantilly,Korba,33,4.1,76.4,31.3238,30.0964
+231,Beano's,New Cairo,18,4.1,37.69,31.4858,30.0308
+232,Cilantro,Tagamoa,31,3.1,64.26,31.464,30.0275
+233,Le Chantilly,Giza,10,2.8,76.59,31.1956,29.9911
+234,Marble Slab,Downtown,39,3.7,27.69,31.2405,30.048
+235,Gourmet,Maadi,6,3.2,71.87,31.2703,29.9599
+236,Harris Cafe,Shoubra,34,3.3,81.71,31.2364,30.0905
+237,Simonds,Mohandessin,37,4.2,79.2,31.2042,30.0652
+238,Paul,New Cairo,19,2.7,63.3,31.4581,30.0071
+239,TBS,Dokki,23,3.2,65.82,31.2099,30.0245
+240,Mandarine Koueider,Heliopolis,10,4.9,93.58,31.3351,30.0805
+241,Baskin Robbins,Korba,35,4.1,42.11,31.3377,30.0867
+242,Breadwinner,Mohandessin,29,5.0,90.93,31.1936,30.056
+243,Marble Slab,6th October,14,2.5,90.47,30.9425,29.9442
+244,Starbucks,6th October,16,4.2,99.92,30.8889,29.9434
+245,Patchi,Nasr City,9,4.3,89.84,31.3133,30.0617
+246,Etoile,Dokki,11,2.6,29.9,31.2001,30.0405
+247,Fresh Food,New Cairo,36,4.9,41.03,31.5011,30.0324
+248,Tutti Frutti,Tagamoa,32,3.1,67.55,31.4742,30.0261
+249,House of Donuts,Giza,8,4.2,43.76,31.1942,30.0008
+250,Baskin Robbins,Sheikh Zayed,39,4.4,79.06,30.9663,30.036
+251,Le Chantilly,Dokki,39,3.9,67.42,31.2017,30.0351
+252,Starbucks,Nasr City,39,4.7,39.88,31.3469,30.0756
+253,Dunkin,Rehab,36,4.5,74.96,31.4811,30.0557
+254,Bake Rolz,Dokki,38,2.7,29.61,31.2021,30.0272
+255,Cookiedoodle,Nasr City,21,3.2,57.79,31.3528,30.0587
+256,Marble Slab,6th October,26,3.3,28.79,30.9723,29.9512
+257,Nola Cupcakes,Korba,21,2.9,63.74,31.3334,30.0932
+258,Paul,New Cairo,20,3.3,45.07,31.4839,30.0209
+259,Patchi,Maadi,39,3.1,50.85,31.2731,29.9744
+260,Beano's,6th October,25,4.3,46.78,30.9617,29.9564
+261,House of Donuts,Zamalek,34,4.0,30.79,31.2293,30.0571
+262,Baskin Robbins,Mohandessin,8,2.9,87.4,31.1949,30.0463
+263,Nola Cupcakes,Tagamoa,19,4.0,25.6,31.46,30.0012
+264,Krispy Kreme,Tagamoa,32,4.9,39.79,31.4794,29.9957
+265,Fresh Food,Heliopolis,13,3.3,44.02,31.36,30.1005
+266,Etoile,Giza,16,4.9,92.07,31.2189,30.0106
+267,House of Donuts,6th October,5,4.0,28.39,30.951,29.9265
+268,Harris Cafe,Dokki,29,4.9,33.24,31.2074,30.0481
+269,El Abd,Downtown,36,4.2,90.68,31.2569,30.0511
+270,Krispy Kreme,Rehab,9,3.8,54.96,31.4953,30.0551
+271,Paul,Heliopolis,23,4.3,94.62,31.3404,30.088
+272,Baskin Robbins,Giza,32,3.6,44.42,31.2093,29.9933
+273,Costa Coffee,Dokki,16,3.3,36.22,31.2094,30.0341
+274,Simonds,Downtown,11,3.5,35.27,31.2376,30.0425
+275,House of Donuts,Rehab,37,3.5,53.41,31.5079,30.0743
+276,Simonds,Korba,24,4.9,45.2,31.3283,30.0991
+277,Le Chantilly,Giza,27,3.8,77.34,31.2086,29.9999
+278,Dukes,Heliopolis,27,4.2,81.51,31.3465,30.1017
+279,Bisco Misr,Tagamoa,27,2.6,73.96,31.4779,30.0178
+280,Edita,Downtown,27,3.9,47.71,31.2468,30.0519
+281,Breadwinner,Downtown,22,4.6,29.1,31.2572,30.054
+282,Mandarine Koueider,Heliopolis,14,3.3,75.83,31.3327,30.0875
+283,Etoile,Zamalek,35,3.8,65.13,31.214,30.067
+284,Edita,Heliopolis,30,2.8,72.68,31.3453,30.0985
+285,Paul,Zamalek,5,4.0,59.19,31.2173,30.0565
+286,Beano's,Downtown,7,3.3,30.71,31.2401,30.0583
+287,Bisco Misr,Sheikh Zayed,6,4.2,89.03,30.9413,30.0158
+288,Bake Rolz,6th October,23,3.4,54.11,30.946,29.9757
+289,TBS,Mohandessin,33,3.0,40.28,31.2015,30.0623
+290,TBS,New Cairo,33,3.7,55.69,31.5198,30.0355
+291,Lychee,Giza,34,4.8,35.26,31.2167,30.0078
+292,Bisco Misr,Shoubra,36,2.6,65.39,31.2579,30.079
+293,Le Chantilly,Nasr City,35,3.0,71.84,31.3248,30.0756
+294,Patchi,Mohandessin,39,4.2,61.27,31.2043,30.0503
+295,El Abd,Downtown,31,3.3,65.88,31.2434,30.0404
+296,Dunkin,Zamalek,28,3.3,42.7,31.2117,30.0534
+297,Cake Maison,Zamalek,17,4.4,32.16,31.2242,30.0578
+298,Cold Stone,Korba,25,2.9,82.41,31.3247,30.0935
+299,House of Donuts,6th October,25,3.2,86.6,30.9775,29.9284
+300,Nola Cupcakes,Korba,15,2.6,73.93,31.3399,30.0864
+301,Dukes,Downtown,34,4.5,37.32,31.23,30.0451
+302,Lychee,Mohandessin,22,3.7,92.87,31.1965,30.0463
+303,Paul,Mohandessin,21,4.8,29.55,31.2015,30.0501
+304,El Abd,Heliopolis,20,3.7,44.81,31.3485,30.0867
+305,El Abd,Shoubra,17,2.6,40.69,31.2547,30.0737
+306,Baskin Robbins,Dokki,9,4.9,72.68,31.206,30.0248
+307,Gourmet,Shoubra,40,3.5,64.18,31.2467,30.0989
+308,Tutti Frutti,Downtown,20,3.5,38.61,31.2468,30.0498
+309,TBS,Zamalek,18,4.8,79.99,31.2168,30.057
+310,Cold Stone,Rehab,37,3.7,52.57,31.5169,30.0576
+311,Bake Rolz,Dokki,10,2.7,37.75,31.2128,30.0407
+312,Breadwinner,Maadi,13,3.4,87.09,31.2476,29.9643
+313,Nola Cupcakes,Nasr City,15,2.7,93.49,31.3404,30.0681
+314,Breadwinner,Nasr City,20,4.0,53.77,31.3485,30.0641
+315,Etoile,Giza,30,3.1,53.11,31.202,30.0056
+316,Fresh Food,Mohandessin,10,4.1,63.75,31.2078,30.069
+317,Breadwinner,Shoubra,16,3.4,26.37,31.2436,30.0882
+318,Cookiedoodle,Korba,39,3.0,32.33,31.3217,30.0802
+319,Mandarine Koueider,Downtown,15,3.4,67.32,31.2343,30.043
+320,Starbucks,Mohandessin,21,4.4,43.06,31.1935,30.0407
+321,Mandarine Koueider,Heliopolis,9,3.7,55.02,31.3386,30.1043
+322,Nola Cupcakes,Tagamoa,31,3.4,83.67,31.4336,30.0075
+323,Cookiedoodle,Shoubra,23,4.5,79.62,31.2406,30.0745
+324,Cake Maison,6th October,38,3.9,85.67,30.9796,29.9615
+325,Costa Coffee,Rehab,35,3.3,32.41,31.5118,30.0541
+326,Bake Rolz,Shoubra,11,3.4,55.15,31.252,30.0889
+327,Tutti Frutti,Giza,29,3.0,97.96,31.2039,30.0064
+328,Edita,6th October,9,4.9,67.94,30.955,29.9312
+329,Lychee,6th October,12,4.6,25.87,30.9573,29.9391
+330,Marble Slab,Mohandessin,7,4.0,32.56,31.1944,30.0479
+331,House of Donuts,New Cairo,5,4.0,74.67,31.4276,29.9908
+332,Simonds,Mohandessin,28,4.4,88.23,31.2021,30.0552
+333,Cilantro,Downtown,17,4.6,50.43,31.2574,30.0577
+334,Marble Slab,Mohandessin,17,3.7,27.64,31.2013,30.0563
+335,Fresh Food,Nasr City,37,3.2,90.56,31.3115,30.073
+336,Auntie Anne's,Mohandessin,11,4.8,63.57,31.2039,30.0477
+337,Gourmet,Dokki,34,4.4,93.76,31.2022,30.0289
+338,Marble Slab,Tagamoa,15,4.6,42.38,31.4325,30.0151
+339,Krispy Kreme,New Cairo,11,3.1,98.99,31.5026,29.9921
+340,Bisco Misr,Downtown,20,2.9,91.34,31.2315,30.0591
+341,Gourmet,Mohandessin,30,4.4,92.39,31.2016,30.0586
+342,Simonds,Downtown,5,5.0,69.47,31.2391,30.0597
+343,Edita,Heliopolis,17,3.5,61.54,31.3319,30.1031
+344,Edita,Nasr City,39,3.8,67.25,31.3187,30.0734
+345,Krispy Kreme,Sheikh Zayed,20,4.9,97.16,30.967,30.0246
+346,Breadwinner,Rehab,19,4.9,78.2,31.5131,30.0627
+347,Baskin Robbins,6th October,35,4.3,92.67,30.9374,29.9773
+348,Krispy Kreme,Korba,33,3.5,84.73,31.337,30.0964
+349,Dipndip,Downtown,18,4.2,32.65,31.2502,30.0471
+350,Harris Cafe,Maadi,18,3.2,80.65,31.2447,29.9622
+351,Auntie Anne's,Mohandessin,19,3.8,98.71,31.2045,30.0539
+352,El Abd,Nasr City,9,4.1,45.27,31.3116,30.0581
+353,Krispy Kreme,Sheikh Zayed,29,3.0,34.31,30.9606,30.001
+354,Etoile,Sheikh Zayed,35,4.4,65.71,30.9482,30.0043
+355,Lychee,Maadi,6,4.3,80.78,31.2667,29.9636
+356,Dunkin,Giza,5,4.1,84.7,31.1917,30.0072
+357,Lychee,Maadi,15,4.1,34.48,31.2655,29.958
+358,Patchi,Nasr City,29,5.0,82.08,31.3184,30.0779
+359,Dunkin,Downtown,19,4.8,68.19,31.2471,30.0467
+360,Cake Maison,Maadi,7,3.3,53.63,31.2586,29.9467
+361,Dipndip,Tagamoa,19,2.5,51.63,31.4378,30.0225
+362,Breadwinner,Shoubra,38,2.7,28.82,31.2429,30.0922
+363,Dunkin,Sheikh Zayed,27,2.7,26.64,30.9561,30.0305
+364,Costa Coffee,Giza,32,4.5,92.68,31.211,30.0195
+365,Nola Cupcakes,Mohandessin,39,4.0,38.26,31.2024,30.0635
+366,Cookiedoodle,Zamalek,40,3.5,84.78,31.2113,30.0564
+367,Cold Stone,Shoubra,25,2.9,71.32,31.2521,30.0802
+368,Dipndip,Rehab,23,3.7,26.87,31.5094,30.047
+369,Dukes,Heliopolis,5,4.6,91.98,31.3308,30.0815
+370,Cold Stone,Mohandessin,30,4.2,36.3,31.2072,30.058
+371,House of Donuts,Tagamoa,37,3.1,59.72,31.457,30.0051
+372,Harris Cafe,Sheikh Zayed,7,3.8,74.24,30.9615,30.0313
+373,Cinnabon,New Cairo,17,4.2,37.45,31.498,30.0091
+374,Edita,Giza,17,4.9,45.69,31.1936,29.9967
+375,Dunkin,Zamalek,28,2.7,55.91,31.213,30.0697
+376,Bake Rolz,Zamalek,21,4.3,58.22,31.2102,30.0566
+377,Paul,Tagamoa,33,3.8,73.18,31.4754,30.0167
+378,Edita,Dokki,35,3.3,54.68,31.2025,30.0234
+379,Mandarine Koueider,Nasr City,20,4.3,52.35,31.3101,30.0771
+380,Patchi,6th October,15,3.4,65.53,30.957,29.9577
+381,Simonds,Rehab,14,4.7,25.89,31.4883,30.0402
+382,Bisco Misr,Heliopolis,10,2.6,95.87,31.3544,30.087
+383,Costa Coffee,Mohandessin,23,4.9,28.33,31.1947,30.0531
+384,Mandarine Koueider,Zamalek,19,4.0,93.65,31.2221,30.0549
+385,Lychee,Korba,5,2.6,67.36,31.3234,30.0989
+386,Edita,Nasr City,35,3.1,83.42,31.3579,30.0677
+387,Krispy Kreme,Dokki,20,3.6,57.62,31.2124,30.0242
+388,Dunkin,Downtown,11,4.2,48.84,31.233,30.0538
+389,El Abd,Giza,14,2.9,38.57,31.2054,29.998
+390,Marble Slab,Dokki,36,3.3,64.6,31.2031,30.0391
+391,Cookiedoodle,Maadi,10,3.5,44.45,31.2467,29.9503
+392,Baskin Robbins,Tagamoa,28,4.7,76.92,31.4222,30.0227
+393,Simonds,Korba,37,3.5,80.56,31.3221,30.0925
+394,Beano's,Dokki,11,4.0,33.01,31.2188,30.0258
+395,Fresh Food,Korba,21,3.8,85.91,31.3259,30.0832
+396,TBS,Giza,32,3.5,83.01,31.2092,30.0069
+397,Le Chantilly,New Cairo,37,4.3,32.73,31.4321,30.027
+398,Baskin Robbins,New Cairo,25,4.2,78.23,31.4972,30.0119
+399,Etoile,Shoubra,10,4.2,97.69,31.2364,30.0992
+400,Cinnabon,New Cairo,25,4.5,32.86,31.4929,30.0287
+401,Etoile,Tagamoa,17,2.9,51.74,31.4682,29.9971
+402,La Poire,Heliopolis,39,4.8,25.45,31.3258,30.1041
+403,Krispy Kreme,Zamalek,25,4.6,70.85,31.2136,30.0534
+404,Le Chantilly,6th October,7,3.2,91.54,30.9282,29.9485
+405,Dunkin,Zamalek,28,3.3,48.04,31.2274,30.0593
+406,Cookiedoodle,Sheikh Zayed,18,4.8,55.86,30.9314,30.0311
+407,Cookiedoodle,Zamalek,24,4.9,47.54,31.2156,30.0579
+408,Cinnabon,Nasr City,13,4.7,93.6,31.3401,30.0684
+409,Cilantro,Maadi,19,3.8,96.94,31.247,29.9562
+410,Dukes,Tagamoa,27,4.0,90.91,31.4682,30.0262
+411,Nola Cupcakes,Heliopolis,34,3.0,27.06,31.3421,30.1057
+412,Etoile,Sheikh Zayed,36,4.8,25.88,30.9796,30.0272
+413,House of Donuts,New Cairo,12,3.2,26.65,31.457,30.0049
+414,Bisco Misr,Dokki,20,4.1,65.29,31.2158,30.0408
+415,Nola Cupcakes,New Cairo,29,3.5,30.94,31.4906,30.0133
+416,Harris Cafe,Shoubra,24,3.8,63.58,31.236,30.0948
+417,Tutti Frutti,Shoubra,22,4.2,49.81,31.2305,30.0742
+418,Harris Cafe,Downtown,38,3.6,31.82,31.2521,30.0578
+419,El Abd,Sheikh Zayed,29,2.7,87.5,30.9452,30.0083
+420,Harris Cafe,Rehab,10,4.2,98.53,31.5196,30.0613
+421,Nola Cupcakes,Maadi,35,2.6,27.62,31.2504,29.9497
+422,Dipndip,Nasr City,31,3.4,84.6,31.3437,30.0528
+423,Fresh Food,Dokki,13,3.5,76.87,31.2024,30.0386
+424,TBS,Nasr City,40,5.0,72.08,31.3135,30.0635
+425,Le Chantilly,Tagamoa,11,2.8,28.2,31.4417,30.0289
+426,Beano's,New Cairo,14,4.3,74.06,31.4516,30.0394
+427,Bake Rolz,Mohandessin,30,4.8,33.7,31.2042,30.0568
+428,Lychee,Downtown,22,4.7,55.11,31.2449,30.0558
+429,Cake Maison,Heliopolis,34,2.7,85.18,31.3581,30.1054
+430,Mandarine Koueider,Mohandessin,23,4.0,42.87,31.2011,30.0402
+431,El Abd,Rehab,10,4.6,70.84,31.4969,30.0679
+432,Beano's,Maadi,31,3.1,64.6,31.2565,29.942
+433,Cookiedoodle,Korba,38,4.5,87.43,31.3309,30.0802
+434,Fresh Food,Downtown,19,3.8,63.84,31.2574,30.0595
+435,Gourmet,Maadi,39,4.5,68.95,31.2527,29.9667
+436,Cake Maison,Downtown,8,3.2,44.29,31.2395,30.0595
+437,Harris Cafe,Heliopolis,38,3.3,56.1,31.3493,30.1032
+438,Gourmet,Tagamoa,29,4.0,59.93,31.4335,30.0295
+439,Dunkin,New Cairo,26,5.0,73.04,31.457,30.0472
+440,Fresh Food,Giza,20,4.8,45.81,31.207,30.014
+441,Cookiedoodle,Rehab,32,4.7,59.42,31.5133,30.0442
+442,Krispy Kreme,Korba,8,4.7,82.26,31.3391,30.0919
+443,Paul,Heliopolis,30,3.5,75.14,31.3275,30.1092
+444,House of Donuts,New Cairo,25,3.1,95.83,31.4394,30.016
+445,Le Chantilly,Rehab,21,4.1,32.28,31.5142,30.0419
+446,Patchi,Maadi,39,4.7,46.23,31.2703,29.9688
+447,Simonds,Nasr City,38,2.6,81.97,31.3102,30.0512
+448,Beano's,Tagamoa,17,2.8,41.02,31.4351,30.0037
+449,Etoile,6th October,32,4.2,64.27,30.9071,29.9556
+450,El Abd,Sheikh Zayed,29,2.8,55.21,30.9641,30.0174
+451,Breadwinner,Shoubra,30,3.7,34.12,31.2433,30.0914
+452,Costa Coffee,Maadi,24,3.4,34.22,31.275,29.9789
+453,Baskin Robbins,Shoubra,34,4.8,78.26,31.2537,30.0784
+454,Paul,Sheikh Zayed,7,3.5,54.07,30.9736,30.0012
+455,Breadwinner,Shoubra,14,3.6,41.63,31.251,30.0935
+456,Lychee,Giza,25,4.5,98.68,31.1908,30.008
+457,TBS,Korba,37,2.7,32.84,31.3313,30.0997
+458,Edita,Zamalek,32,4.9,63.64,31.2293,30.0602
+459,Breadwinner,Maadi,7,2.7,57.92,31.2483,29.968
+460,Mandarine Koueider,Korba,13,2.6,86.95,31.3292,30.0921
+461,Fresh Food,Sheikh Zayed,21,4.0,72.42,30.9471,30.0383
+462,Auntie Anne's,Tagamoa,20,3.2,89.06,31.4718,30.0216
+463,Dunkin,Tagamoa,30,3.9,46.08,31.4308,30.0211
+464,Auntie Anne's,Korba,27,2.9,85.85,31.3276,30.0984
+465,El Abd,Sheikh Zayed,16,2.7,60.62,30.9294,30.0305
+466,Bisco Misr,Dokki,36,2.7,38.13,31.2151,30.0441
+467,Bake Rolz,Zamalek,33,3.5,51.07,31.2228,30.0573
+468,Gourmet,Nasr City,18,2.9,31.27,31.3392,30.0657
+469,TBS,Rehab,30,2.6,38.48,31.5098,30.0463
+470,Mandarine Koueider,Downtown,32,4.5,79.79,31.2475,30.042
+471,Harris Cafe,Giza,30,3.2,96.84,31.2091,30.0099
+472,Baskin Robbins,Dokki,12,3.4,42.58,31.214,30.0349
+473,Marble Slab,Nasr City,28,2.9,46.32,31.3485,30.0726
+474,Paul,Rehab,15,3.4,78.42,31.504,30.072
+475,Dukes,Tagamoa,34,4.6,26.22,31.4419,30.0042
+476,Baskin Robbins,Dokki,26,4.6,34.58,31.2011,30.0387
+477,Beano's,Zamalek,10,2.7,87.14,31.219,30.0526
+478,Beano's,Korba,21,3.5,48.6,31.331,30.0834
+479,House of Donuts,Zamalek,36,2.9,72.07,31.2192,30.051
+480,Edita,Zamalek,7,2.6,45.63,31.2285,30.0612
+481,Breadwinner,Mohandessin,13,4.0,64.9,31.2079,30.0505
+482,Marble Slab,6th October,27,4.3,71.54,30.942,29.9319
+483,Dukes,Mohandessin,12,3.7,72.89,31.2074,30.0665
+484,Starbucks,6th October,23,3.3,48.8,30.9124,29.9639
+485,Costa Coffee,Rehab,36,4.5,54.26,31.5118,30.064
+486,Marble Slab,Maadi,7,3.1,37.25,31.2661,29.9506
+487,TBS,Rehab,19,4.5,78.77,31.496,30.0567
+488,Dunkin,Mohandessin,9,4.1,57.25,31.193,30.0471
+489,Edita,Shoubra,6,3.5,68.96,31.2377,30.0705
+490,Cilantro,Mohandessin,24,3.7,57.32,31.2025,30.0562
+491,Edita,Tagamoa,36,3.6,50.87,31.4589,30.0275
+492,Nola Cupcakes,Shoubra,18,4.0,41.3,31.2521,30.0792
+493,Cookiedoodle,Mohandessin,20,3.7,54.69,31.1958,30.0546
+494,Dunkin,Korba,26,4.5,96.67,31.3317,30.0976
+495,Bake Rolz,Korba,10,3.6,99.18,31.3252,30.0909
+496,Cilantro,Tagamoa,32,4.1,58.69,31.4583,30.013
+497,Patchi,6th October,36,4.3,73.77,30.9026,29.9295
+498,Patchi,Giza,29,3.1,57.49,31.198,30.0001
+499,Mandarine Koueider,Shoubra,20,3.1,62.85,31.2596,30.0831
+500,Le Chantilly,Tagamoa,31,3.3,82.61,31.4616,30.014

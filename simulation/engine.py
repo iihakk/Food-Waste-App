@@ -11,7 +11,6 @@ The simulation follows this daily cycle:
 2. Throughout day: Customers arrive and see n stores based on ranking algorithm
 3. Customer decision: Pick best store from displayed options (based on valuation)
 4. End of day: Calculate sold, canceled, wasted bags and revenue
-
 Key assumptions:
 - Each customer buys exactly 1 surprise bag
 - Customers only see n stores (not all) - this is the key constraint
@@ -128,6 +127,7 @@ class SimulationEngine:
                 sid = store['store_id']
                 estimated = store['average_bags_at_9AM']
                 # Add random variation (±30%) - this is the ACTUAL amount
+                # Creates realistic mismatch between expected and actual availability
                 actual = max(1, int(estimated * np.random.uniform(0.7, 1.3)))
                 
                 daily_estimated[sid] = estimated
@@ -139,43 +139,54 @@ class SimulationEngine:
                 stats[sid]['actual_total'] += actual
 
             # Calculate what the algorithm sees (adjusted or raw)
+            # Algorithm sees ESTIMATED values (not actual - we don't know actual until end of day)
             if use_accuracy_adjustment and day > 2:
-                # Use accuracy-adjusted estimates
+                # Use accuracy-adjusted estimates (helps predict better)
                 current_items = {}
                 for sid in store_ids:
                     adjusted = self.accuracy_tracker.get_adjusted_estimate(sid, daily_estimated[sid])
-                    # Conservative: use minimum of adjusted estimate and actual
-                    current_items[sid] = min(adjusted, daily_actual[sid])
+                    current_items[sid] = adjusted
             else:
-                # Use actual items (original behavior)
-                current_items = daily_actual.copy()
+                # Use estimated items - this is all we know in the morning!
+                current_items = daily_estimated.copy()
 
-            # Track what's really available (for cancellation detection)
-            actual_remaining = daily_actual.copy()
+            # ==================== REGISTRATION MODEL ====================
+            # Key insight: We only know ESTIMATED bags in the morning
+            # Customers REGISTER based on estimates throughout the day
+            # At END OF DAY, we discover actual bags and may have to cancel
             
-            # Track customers per store
-            customers_per_store = defaultdict(int)
+            # Track registrations per store (customers who signed up based on estimates)
+            registrations_per_store = defaultdict(list)  # store_id -> list of customer_ids
+            estimated_remaining = daily_estimated.copy()  # What customers see during the day
+            
+            # Track for metrics
+            customers_per_store = defaultdict(int)  # Will be filled at end of day
             day_customers_left = 0
             day_cancellations = defaultdict(int)
 
             # Simulation date for priority queue
             sim_date = date(2024, 1, 1) + timedelta(days=day - 1)
 
-            # ==================== NEW: PRIORITY CUSTOMER PHASE ====================
+            # ==================== PRIORITY CUSTOMER PHASE ====================
+            # Priority customers from previous cancellations get first dibs
             priority_customers = self.cancellation_handler.get_priority_customers(sim_date)
             
             for priority_info in priority_customers:
                 cust_id = priority_info['customer_id']
                 priority_store = priority_info['store_id']
                 
-                if actual_remaining.get(priority_store, 0) > 0:
-                    customers_per_store[priority_store] += 1
-                    actual_remaining[priority_store] -= 1
+                # Priority customers register based on estimates
+                if estimated_remaining.get(priority_store, 0) > 0:
+                    registrations_per_store[priority_store].append(cust_id)
+                    estimated_remaining[priority_store] -= 1
                     current_items[priority_store] = max(0, current_items[priority_store] - 1)
                     self.cancellation_handler.serve_priority_customer(sim_date, cust_id, priority_store)
                     total_customers += 1
 
-            # ==================== CUSTOMER ARRIVAL PHASE ====================
+            # ==================== CUSTOMER REGISTRATION PHASE ====================
+            # Customers register throughout the day based on ESTIMATED availability
+            customer_valuations_cache = {}  # Cache for end-of-day processing
+            
             for _, cust in self.customers.iterrows():
                 if random.random() > shopping_probability:
                     continue
@@ -183,7 +194,7 @@ class SimulationEngine:
                 total_customers += 1
                 cust_id = cust['customer_id']
 
-                # Get stores to display using ranking algorithm
+                # Get stores to display using ranking algorithm (sees ESTIMATES only!)
                 displayed = ranking_func(self.stores, n_stores, current_items)
 
                 # Track exposures
@@ -195,12 +206,13 @@ class SimulationEngine:
                     day_customers_left += 1
                     continue
 
-                # Build customer valuations dict for cancellation handler
+                # Build customer valuations dict
                 customer_valuations = {}
                 for sid in store_ids:
                     col = f'store{sid}_valuation'
                     if col in self.customers.columns:
                         customer_valuations[sid] = cust[col]
+                customer_valuations_cache[cust_id] = customer_valuations
 
                 # Customer picks best store from displayed options
                 best_store = None
@@ -211,31 +223,62 @@ class SimulationEngine:
                         best_val = val
                         best_store = sid
 
-                # Customer orders from preferred store
+                # Customer REGISTERS for their preferred store (based on estimates)
                 if best_store:
-                    # Check ACTUAL availability (may differ from displayed)
-                    if actual_remaining.get(best_store, 0) > 0:
-                        # Successful order
-                        customers_per_store[best_store] += 1
-                        actual_remaining[best_store] -= 1
+                    if estimated_remaining.get(best_store, 0) > 0:
+                        # Register for this store
+                        registrations_per_store[best_store].append(cust_id)
+                        estimated_remaining[best_store] -= 1
                         current_items[best_store] = max(0, current_items[best_store] - 1)
                     else:
-                        # ============ NEW: CANCELLATION HANDLING ============
-                        day_cancellations[best_store] += 1
-                        stats[best_store]['cancellations'] += 1
+                        # No estimated bags left - customer leaves
+                        customers_left += 1
+                        day_customers_left += 1
+                else:
+                    customers_left += 1
+                    day_customers_left += 1
+
+            # ==================== END OF DAY: FULFILL REGISTRATIONS ====================
+            # Now we discover ACTUAL bags and fulfill registrations
+            # If registrations > actual -> some customers get cancelled
+            # If registrations < actual -> excess bags become waste
+            
+            for sid in store_ids:
+                registered_customers = registrations_per_store[sid]
+                actual_bags = daily_actual[sid]
+                num_registered = len(registered_customers)
+                
+                if num_registered <= actual_bags:
+                    # All registered customers get served
+                    customers_per_store[sid] = num_registered
+                else:
+                    # More registrations than actual bags -> CANCELLATIONS!
+                    # Serve first (actual_bags) customers, cancel the rest
+                    customers_per_store[sid] = actual_bags
+                    cancelled_count = num_registered - actual_bags
+                    day_cancellations[sid] = cancelled_count
+                    stats[sid]['cancellations'] += cancelled_count
+                    
+                    # Process each cancelled customer
+                    cancelled_customers = registered_customers[actual_bags:]  # Last ones cancelled
+                    for cust_id in cancelled_customers:
+                        customer_valuations = customer_valuations_cache.get(cust_id, {})
                         
-                        # Find stores with actual availability for alternatives
-                        available_stores = [sid for sid, bags in actual_remaining.items() if bags > 0]
+                        # Find stores that have excess actual bags (actual > registrations)
+                        available_stores = [
+                            s for s in store_ids 
+                            if daily_actual[s] > len(registrations_per_store[s])
+                        ]
                         
                         # Handle the cancellation
                         result = self.cancellation_handler.handle_cancellation(
                             customer_id=cust_id,
-                            original_store_id=best_store,
+                            original_store_id=sid,
                             customer_valuations=customer_valuations,
                             available_stores=available_stores,
-                            current_bags=actual_remaining,
+                            current_bags={s: daily_actual[s] - len(registrations_per_store[s]) for s in store_ids},
                             stores_df=self.stores,
-                            order_price=daily_prices[best_store],
+                            order_price=daily_prices[sid],
                             current_date=sim_date
                         )
                         
@@ -245,22 +288,23 @@ class SimulationEngine:
                                 # Customer accepts alternative
                                 alt_store = result['alternatives'][0][0]  # Best alternative
                                 
-                                if actual_remaining.get(alt_store, 0) > 0:
+                                # Check if alternative store has excess capacity
+                                alt_excess = daily_actual[alt_store] - len(registrations_per_store[alt_store])
+                                if alt_excess > 0:
                                     self.cancellation_handler.accept_alternative(cust_id, alt_store)
+                                    registrations_per_store[alt_store].append(cust_id)
                                     customers_per_store[alt_store] += 1
-                                    actual_remaining[alt_store] -= 1
-                                    current_items[alt_store] = max(0, current_items[alt_store] - 1)
                                 else:
-                                    # Alternative also ran out
+                                    # Alternative also full
                                     self.cancellation_handler.refuse_alternatives(
-                                        cust_id, best_store, daily_prices[best_store], sim_date
+                                        cust_id, sid, daily_prices[sid], sim_date
                                     )
                                     customers_left += 1
                                     day_customers_left += 1
                             else:
-                                # Customer refuses alternatives -> priority + refund + points
+                                # Customer refuses alternatives
                                 self.cancellation_handler.refuse_alternatives(
-                                    cust_id, best_store, daily_prices[best_store], sim_date
+                                    cust_id, sid, daily_prices[sid], sim_date
                                 )
                                 customers_left += 1
                                 day_customers_left += 1
@@ -268,9 +312,6 @@ class SimulationEngine:
                             # No alternatives available
                             customers_left += 1
                             day_customers_left += 1
-                else:
-                    customers_left += 1
-                    day_customers_left += 1
 
             # ==================== END OF DAY PHASE ====================
             # Record accuracy data for each store
