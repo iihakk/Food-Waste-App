@@ -71,8 +71,7 @@
               "RelativeToolTip": "data\\stores.csv",
               "ViewState": "AgIAABkAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.002120|",
-              "WhenOpened": "2025-12-07T23:11:49.047Z",
-              "EditorCaption": ""
+              "WhenOpened": "2025-12-07T23:11:49.047Z"
             },
             {
               "$type": "Document",
@@ -84,8 +83,7 @@
               "RelativeToolTip": "data\\customers.csv",
               "ViewState": "AgIAAGAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.002120|",
-              "WhenOpened": "2025-12-07T23:11:44.722Z",
-              "EditorCaption": ""
+              "WhenOpened": "2025-12-07T23:11:44.722Z"
             },
             {
               "$type": "Document",
@@ -97,8 +95,7 @@
               "RelativeToolTip": "simulation\\cancellation_handler.py",
               "ViewState": "AgIAACQBAAAAAAAAAAAAAIcBAAANAAAAAAAAAA==",
               "Icon": "00000000-0000-0000-0000-000000000000.000000|iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAANASURBVEhLtZVPaBxlGMZ/s7uTNazZMW3Y/BGxRFOkWsQU3VAPxoJ6KiKIItJDwTnkomhhK\u002BRg7En3losHFwlBRDx5KGgPHhQruhKaUChaiCbWuNrGtttunN3Z\u002Bb7v9TCb7GTI6HrwgZf55nln3ud9n\u002B9jBv5PiIgV51zXlTj3L3i0Uqksxclt7CkwPz8fp/fE7Oxs4Pv\u002BlSAIXq5UKtV4HiAVJ/4LHMexS6XSPtu2P3JdtxjP808C1Wo1MaIoFAqDEZEju5J7wXVd8Tyvp5ibm9tZr62t3ZiZmVl1Xfe\u002BaL3ECXpFuVymXC6zuLg4mE6nR4DD0XwmehNF3IooisXQ7lKptItfWFhYWllZ2cUlTlAsFveMqakpbNvG0xYb9TbrN1rcbBoymQyO42TjdRInSMJtz\u002Bedcz\u002Bwvnkbr\u002BmjlUKrgOF8ljMvPP3I8vKyHX0\u002BcYL4ydmO9bpif86m/OJkp3gYv27e4uzSL9np6emD0TqJAnFrtsMY4Zsff\u002BfUh99itMZoFV6VYstrMTAwcGe0TqIAgNYarTVWKsXSlS0\u002B/r7GhbU/efLQCEcPFnjq8Bh2GrRWaK0xxvDEZP1NaXwuElw7LyL7Evcgeorq\u002BQk\u002B\u002BHJ1x\u002B\u002BuNeHadO6NGPC\u002BDl9qXXqcoVNvJU4QteXcxVqny7DT7rrLGa2YGAYQ0C1oXQZ19dlEgSg2NhuYTqdGKdJiODCUY3w4z/hInvtHHZ47Os5LR34C5YFugvagXbs38WsatejdaoAKArQKuHuwn/dP\u002BPTLatgthNegBmoLjA\u002BmDdqHkdPJmxy1aCyfxXSsmDmWoz/4CtRvoGoQbID/MwS3Op03u1P03XMzUSCKYw\u002BN7mymc4fqJkwQWqE6haPr7ATYo5/2ZBFAM3\u002BA2vUGxx9uUpBPQgtMG/oOgZUFUeGHIZUD0nDXM9fIDD2WKBBHKpXCsiz6zGW4/l5Y3Pig2yAajECuCGOn3wbOA1XLsho9WQRgjEFrjZCWrtcdW/a/AkMnIdUPgGVZX1iW1SDpnxznonjj9dcuPVD47kHqn4Ui21PkJglGz7TtrPO8ZVln4\u002B/1DBFJi8irohor8tdFJVsXRNp/rItIVUROiMjx6PN/A\u002BOzH72MzdOgAAAAAElFTkSuQmCC",
-              "WhenOpened": "2025-12-07T23:05:08.263Z",
-              "EditorCaption": ""
+              "WhenOpened": "2025-12-07T23:05:08.263Z"
             },
             {
               "$type": "Document",
@@ -110,8 +107,7 @@
               "RelativeToolTip": "simulation\\__init__.py",
               "ViewState": "AgIAAAAAAAAAAAAAAAAAAAIAAAAhAAAAAAAAAA==",
               "Icon": "00000000-0000-0000-0000-000000000000.000000|iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAANASURBVEhLtZVPaBxlGMZ/s7uTNazZMW3Y/BGxRFOkWsQU3VAPxoJ6KiKIItJDwTnkomhhK\u002BRg7En3losHFwlBRDx5KGgPHhQruhKaUChaiCbWuNrGtttunN3Z\u002Bb7v9TCb7GTI6HrwgZf55nln3ud9n\u002B9jBv5PiIgV51zXlTj3L3i0Uqksxclt7CkwPz8fp/fE7Oxs4Pv\u002BlSAIXq5UKtV4HiAVJ/4LHMexS6XSPtu2P3JdtxjP808C1Wo1MaIoFAqDEZEju5J7wXVd8Tyvp5ibm9tZr62t3ZiZmVl1Xfe\u002BaL3ECXpFuVymXC6zuLg4mE6nR4DD0XwmehNF3IooisXQ7lKptItfWFhYWllZ2cUlTlAsFveMqakpbNvG0xYb9TbrN1rcbBoymQyO42TjdRInSMJtz\u002Bedcz\u002Bwvnkbr\u002BmjlUKrgOF8ljMvPP3I8vKyHX0\u002BcYL4ydmO9bpif86m/OJkp3gYv27e4uzSL9np6emD0TqJAnFrtsMY4Zsff\u002BfUh99itMZoFV6VYstrMTAwcGe0TqIAgNYarTVWKsXSlS0\u002B/r7GhbU/efLQCEcPFnjq8Bh2GrRWaK0xxvDEZP1NaXwuElw7LyL7Evcgeorq\u002BQk\u002B\u002BHJ1x\u002B\u002BuNeHadO6NGPC\u002BDl9qXXqcoVNvJU4QteXcxVqny7DT7rrLGa2YGAYQ0C1oXQZ19dlEgSg2NhuYTqdGKdJiODCUY3w4z/hInvtHHZ47Os5LR34C5YFugvagXbs38WsatejdaoAKArQKuHuwn/dP\u002BPTLatgthNegBmoLjA\u002BmDdqHkdPJmxy1aCyfxXSsmDmWoz/4CtRvoGoQbID/MwS3Op03u1P03XMzUSCKYw\u002BN7mymc4fqJkwQWqE6haPr7ATYo5/2ZBFAM3\u002BA2vUGxx9uUpBPQgtMG/oOgZUFUeGHIZUD0nDXM9fIDD2WKBBHKpXCsiz6zGW4/l5Y3Pig2yAajECuCGOn3wbOA1XLsho9WQRgjEFrjZCWrtcdW/a/AkMnIdUPgGVZX1iW1SDpnxznonjj9dcuPVD47kHqn4Ui21PkJglGz7TtrPO8ZVln4\u002B/1DBFJi8irohor8tdFJVsXRNp/rItIVUROiMjx6PN/A\u002BOzH72MzdOgAAAAAElFTkSuQmCC",
-              "WhenOpened": "2025-12-07T23:02:00.536Z",
-              "EditorCaption": ""
+              "WhenOpened": "2025-12-07T23:02:00.536Z"
             },
             {
               "$type": "Document",
@@ -123,8 +119,7 @@
               "RelativeToolTip": "simulation\\engine.py",
               "ViewState": "AgIAAAAAAAAAAAAAAAAAAG8AAAAPAAAAAAAAAA==",
               "Icon": "00000000-0000-0000-0000-000000000000.000000|iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAANASURBVEhLtZVPaBxlGMZ/s7uTNazZMW3Y/BGxRFOkWsQU3VAPxoJ6KiKIItJDwTnkomhhK\u002BRg7En3losHFwlBRDx5KGgPHhQruhKaUChaiCbWuNrGtttunN3Z\u002Bb7v9TCb7GTI6HrwgZf55nln3ud9n\u002B9jBv5PiIgV51zXlTj3L3i0Uqksxclt7CkwPz8fp/fE7Oxs4Pv\u002BlSAIXq5UKtV4HiAVJ/4LHMexS6XSPtu2P3JdtxjP808C1Wo1MaIoFAqDEZEju5J7wXVd8Tyvp5ibm9tZr62t3ZiZmVl1Xfe\u002BaL3ECXpFuVymXC6zuLg4mE6nR4DD0XwmehNF3IooisXQ7lKptItfWFhYWllZ2cUlTlAsFveMqakpbNvG0xYb9TbrN1rcbBoymQyO42TjdRInSMJtz\u002Bedcz\u002Bwvnkbr\u002BmjlUKrgOF8ljMvPP3I8vKyHX0\u002BcYL4ydmO9bpif86m/OJkp3gYv27e4uzSL9np6emD0TqJAnFrtsMY4Zsff\u002BfUh99itMZoFV6VYstrMTAwcGe0TqIAgNYarTVWKsXSlS0\u002B/r7GhbU/efLQCEcPFnjq8Bh2GrRWaK0xxvDEZP1NaXwuElw7LyL7Evcgeorq\u002BQk\u002B\u002BHJ1x\u002B\u002BuNeHadO6NGPC\u002BDl9qXXqcoVNvJU4QteXcxVqny7DT7rrLGa2YGAYQ0C1oXQZ19dlEgSg2NhuYTqdGKdJiODCUY3w4z/hInvtHHZ47Os5LR34C5YFugvagXbs38WsatejdaoAKArQKuHuwn/dP\u002BPTLatgthNegBmoLjA\u002BmDdqHkdPJmxy1aCyfxXSsmDmWoz/4CtRvoGoQbID/MwS3Op03u1P03XMzUSCKYw\u002BN7mymc4fqJkwQWqE6haPr7ATYo5/2ZBFAM3\u002BA2vUGxx9uUpBPQgtMG/oOgZUFUeGHIZUD0nDXM9fIDD2WKBBHKpXCsiz6zGW4/l5Y3Pig2yAajECuCGOn3wbOA1XLsho9WQRgjEFrjZCWrtcdW/a/AkMnIdUPgGVZX1iW1SDpnxznonjj9dcuPVD47kHqn4Ui21PkJglGz7TtrPO8ZVln4\u002B/1DBFJi8irohor8tdFJVsXRNp/rItIVUROiMjx6PN/A\u002BOzH72MzdOgAAAAAElFTkSuQmCC",
-              "WhenOpened": "2025-12-07T23:01:50.086Z",
-              "EditorCaption": ""
+              "WhenOpened": "2025-12-07T23:01:50.086Z"
             },
             {
               "$type": "Document",
@@ -136,8 +131,7 @@
               "RelativeToolTip": "simulation\\data_loader.py",
               "ViewState": "AgIAAHMAAAAAAAAAAAAAAHMAAAAAAAAAAAAAAA==",
               "Icon": "00000000-0000-0000-0000-000000000000.000000|iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAANASURBVEhLtZVPaBxlGMZ/s7uTNazZMW3Y/BGxRFOkWsQU3VAPxoJ6KiKIItJDwTnkomhhK\u002BRg7En3losHFwlBRDx5KGgPHhQruhKaUChaiCbWuNrGtttunN3Z\u002Bb7v9TCb7GTI6HrwgZf55nln3ud9n\u002B9jBv5PiIgV51zXlTj3L3i0Uqksxclt7CkwPz8fp/fE7Oxs4Pv\u002BlSAIXq5UKtV4HiAVJ/4LHMexS6XSPtu2P3JdtxjP808C1Wo1MaIoFAqDEZEju5J7wXVd8Tyvp5ibm9tZr62t3ZiZmVl1Xfe\u002BaL3ECXpFuVymXC6zuLg4mE6nR4DD0XwmehNF3IooisXQ7lKptItfWFhYWllZ2cUlTlAsFveMqakpbNvG0xYb9TbrN1rcbBoymQyO42TjdRInSMJtz\u002Bedcz\u002Bwvnkbr\u002BmjlUKrgOF8ljMvPP3I8vKyHX0\u002BcYL4ydmO9bpif86m/OJkp3gYv27e4uzSL9np6emD0TqJAnFrtsMY4Zsff\u002BfUh99itMZoFV6VYstrMTAwcGe0TqIAgNYarTVWKsXSlS0\u002B/r7GhbU/efLQCEcPFnjq8Bh2GrRWaK0xxvDEZP1NaXwuElw7LyL7Evcgeorq\u002BQk\u002B\u002BHJ1x\u002B\u002BuNeHadO6NGPC\u002BDl9qXXqcoVNvJU4QteXcxVqny7DT7rrLGa2YGAYQ0C1oXQZ19dlEgSg2NhuYTqdGKdJiODCUY3w4z/hInvtHHZ47Os5LR34C5YFugvagXbs38WsatejdaoAKArQKuHuwn/dP\u002BPTLatgthNegBmoLjA\u002BmDdqHkdPJmxy1aCyfxXSsmDmWoz/4CtRvoGoQbID/MwS3Op03u1P03XMzUSCKYw\u002BN7mymc4fqJkwQWqE6haPr7ATYo5/2ZBFAM3\u002BA2vUGxx9uUpBPQgtMG/oOgZUFUeGHIZUD0nDXM9fIDD2WKBBHKpXCsiz6zGW4/l5Y3Pig2yAajECuCGOn3wbOA1XLsho9WQRgjEFrjZCWrtcdW/a/AkMnIdUPgGVZX1iW1SDpnxznonjj9dcuPVD47kHqn4Ui21PkJglGz7TtrPO8ZVln4\u002B/1DBFJi8irohor8tdFJVsXRNp/rItIVUROiMjx6PN/A\u002BOzH72MzdOgAAAAAElFTkSuQmCC",
-              "WhenOpened": "2025-12-07T23:01:43.023Z",
-              "EditorCaption": ""
+              "WhenOpened": "2025-12-07T23:01:43.023Z"
             },
             {
               "$type": "Document",
@@ -147,14 +141,10 @@
               "RelativeDocumentMoniker": "simulation\\algorithms.py",
               "ToolTip": "D:\\Computer Arch\\Project 2\\Food-Waste-App\\simulation\\algorithms.py",
               "RelativeToolTip": "simulation\\algorithms.py",
-              "ViewState": "AgIAAIwBAAAAAAAAAAAuwJgBAAAlAAAAAAAAAA==",
+              "ViewState": "AgIAADUDAAAAAAAAAAAAAKUEAAAAAAAAAAAAAA==",
               "Icon": "00000000-0000-0000-0000-000000000000.000000|iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAANASURBVEhLtZVPaBxlGMZ/s7uTNazZMW3Y/BGxRFOkWsQU3VAPxoJ6KiKIItJDwTnkomhhK\u002BRg7En3losHFwlBRDx5KGgPHhQruhKaUChaiCbWuNrGtttunN3Z\u002Bb7v9TCb7GTI6HrwgZf55nln3ud9n\u002B9jBv5PiIgV51zXlTj3L3i0Uqksxclt7CkwPz8fp/fE7Oxs4Pv\u002BlSAIXq5UKtV4HiAVJ/4LHMexS6XSPtu2P3JdtxjP808C1Wo1MaIoFAqDEZEju5J7wXVd8Tyvp5ibm9tZr62t3ZiZmVl1Xfe\u002BaL3ECXpFuVymXC6zuLg4mE6nR4DD0XwmehNF3IooisXQ7lKptItfWFhYWllZ2cUlTlAsFveMqakpbNvG0xYb9TbrN1rcbBoymQyO42TjdRInSMJtz\u002Bedcz\u002Bwvnkbr\u002BmjlUKrgOF8ljMvPP3I8vKyHX0\u002BcYL4ydmO9bpif86m/OJkp3gYv27e4uzSL9np6emD0TqJAnFrtsMY4Zsff\u002BfUh99itMZoFV6VYstrMTAwcGe0TqIAgNYarTVWKsXSlS0\u002B/r7GhbU/efLQCEcPFnjq8Bh2GrRWaK0xxvDEZP1NaXwuElw7LyL7Evcgeorq\u002BQk\u002B\u002BHJ1x\u002B\u002BuNeHadO6NGPC\u002BDl9qXXqcoVNvJU4QteXcxVqny7DT7rrLGa2YGAYQ0C1oXQZ19dlEgSg2NhuYTqdGKdJiODCUY3w4z/hInvtHHZ47Os5LR34C5YFugvagXbs38WsatejdaoAKArQKuHuwn/dP\u002BPTLatgthNegBmoLjA\u002BmDdqHkdPJmxy1aCyfxXSsmDmWoz/4CtRvoGoQbID/MwS3Op03u1P03XMzUSCKYw\u002BN7mymc4fqJkwQWqE6haPr7ATYo5/2ZBFAM3\u002BA2vUGxx9uUpBPQgtMG/oOgZUFUeGHIZUD0nDXM9fIDD2WKBBHKpXCsiz6zGW4/l5Y3Pig2yAajECuCGOn3wbOA1XLsho9WQRgjEFrjZCWrtcdW/a/AkMnIdUPgGVZX1iW1SDpnxznonjj9dcuPVD47kHqn4Ui21PkJglGz7TtrPO8ZVln4\u002B/1DBFJi8irohor8tdFJVsXRNp/rItIVUROiMjx6PN/A\u002BOzH72MzdOgAAAAAElFTkSuQmCC",
               "WhenOpened": "2025-12-07T22:55:56.991Z",
               "EditorCaption": ""
-            },
-            {
-              "$type": "Bookmark",
-              "Name": "ST:1:0:{d212f56b-c48a-434c-a121-1c5d80b59b9f}"
             },
             {
               "$type": "Document",
@@ -166,8 +156,11 @@
               "RelativeToolTip": "app.py",
               "ViewState": "AgIAAAYAAAAAAAAAAAAIwBIAAAAAAAAAAAAAAA==",
               "Icon": "00000000-0000-0000-0000-000000000000.000000|iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAANASURBVEhLtZVPaBxlGMZ/s7uTNazZMW3Y/BGxRFOkWsQU3VAPxoJ6KiKIItJDwTnkomhhK\u002BRg7En3losHFwlBRDx5KGgPHhQruhKaUChaiCbWuNrGtttunN3Z\u002Bb7v9TCb7GTI6HrwgZf55nln3ud9n\u002B9jBv5PiIgV51zXlTj3L3i0Uqksxclt7CkwPz8fp/fE7Oxs4Pv\u002BlSAIXq5UKtV4HiAVJ/4LHMexS6XSPtu2P3JdtxjP808C1Wo1MaIoFAqDEZEju5J7wXVd8Tyvp5ibm9tZr62t3ZiZmVl1Xfe\u002BaL3ECXpFuVymXC6zuLg4mE6nR4DD0XwmehNF3IooisXQ7lKptItfWFhYWllZ2cUlTlAsFveMqakpbNvG0xYb9TbrN1rcbBoymQyO42TjdRInSMJtz\u002Bedcz\u002Bwvnkbr\u002BmjlUKrgOF8ljMvPP3I8vKyHX0\u002BcYL4ydmO9bpif86m/OJkp3gYv27e4uzSL9np6emD0TqJAnFrtsMY4Zsff\u002BfUh99itMZoFV6VYstrMTAwcGe0TqIAgNYarTVWKsXSlS0\u002B/r7GhbU/efLQCEcPFnjq8Bh2GrRWaK0xxvDEZP1NaXwuElw7LyL7Evcgeorq\u002BQk\u002B\u002BHJ1x\u002B\u002BuNeHadO6NGPC\u002BDl9qXXqcoVNvJU4QteXcxVqny7DT7rrLGa2YGAYQ0C1oXQZ19dlEgSg2NhuYTqdGKdJiODCUY3w4z/hInvtHHZ47Os5LR34C5YFugvagXbs38WsatejdaoAKArQKuHuwn/dP\u002BPTLatgthNegBmoLjA\u002BmDdqHkdPJmxy1aCyfxXSsmDmWoz/4CtRvoGoQbID/MwS3Op03u1P03XMzUSCKYw\u002BN7mymc4fqJkwQWqE6haPr7ATYo5/2ZBFAM3\u002BA2vUGxx9uUpBPQgtMG/oOgZUFUeGHIZUD0nDXM9fIDD2WKBBHKpXCsiz6zGW4/l5Y3Pig2yAajECuCGOn3wbOA1XLsho9WQRgjEFrjZCWrtcdW/a/AkMnIdUPgGVZX1iW1SDpnxznonjj9dcuPVD47kHqn4Ui21PkJglGz7TtrPO8ZVln4\u002B/1DBFJi8irohor8tdFJVsXRNp/rItIVUROiMjx6PN/A\u002BOzH72MzdOgAAAAAElFTkSuQmCC",
-              "WhenOpened": "2025-12-07T21:57:58.939Z",
-              "EditorCaption": ""
+              "WhenOpened": "2025-12-07T21:57:58.939Z"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:1:0:{d212f56b-c48a-434c-a121-1c5d80b59b9f}"
             },
             {
               "$type": "Bookmark",
