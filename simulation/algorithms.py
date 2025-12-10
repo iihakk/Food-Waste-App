@@ -28,7 +28,6 @@ NOTE: Brute force is NOT allowed in this course.
 """
 
 import math
-import random
 import numpy as np
 import pandas as pd
 from collections import defaultdict
@@ -846,71 +845,131 @@ def time_decay_urgency(stores_df, n, current_bags, closing_times=None, current_t
 
 def supply_demand_equilibrium(stores_df, n, current_bags, customer_valuations=None, demand_forecast=None):
     """
-    SMART EQUILIBRIUM: Personalized Supply-Demand Balancing
+    SUPPLY DEMAND EQUILIBRIUM: Balance current supply with predicted demand.
     
-    Strategy: 
-    1. PERSONALIZATION: Uses specific customer preferences if available (Boosts Satisfaction).
-    2. LOGARITHMIC SUPPLY: Prioritizes high stock but with diminishing returns (Boosts Fairness).
-    3. RANDOM JITTER: Adds tiny noise to break ties (Boosts Fairness/Exposure).
-
-    Formula:
-        Score = (Personalized_Rating) * (1 + 0.5 * log_supply_index) * Jitter
-
-    KPI Targets:
-    - High Satisfaction (due to personalization)
-    - Low Waste (due to inventory weighting)
-    - High Fairness (due to log scaling and jitter)
-
+    Key Insight: Each store has predictable demand patterns based on:
+    - Historical sales data
+    - Rating (popularity)
+    - Day of week / time of day
+    - Weather and events
+    
+    Strategy (Greedy with Predictive Scoring):
+    1. Forecast remaining demand for each store
+    2. Calculate supply/demand imbalance
+    3. Prioritize stores where supply exceeds predicted demand
+    4. Prevent waste by redirecting customers to oversupplied stores
+    
+    Demand Forecast Model:
+        base_demand = historical_average * rating_multiplier
+        adjusted_demand = base_demand * time_factor * day_factor
+        imbalance = current_supply - predicted_demand
+    
+    Example Scenarios:
+    - Popular bakery: Usually sells 30 bags, has 35 ? Small imbalance
+    - New restaurant: Usually sells 5 bags, has 20 ? Large imbalance!
+    - Cafe on Monday: Lower demand predicted, has normal supply ? Priority
+    
+    Pros:
+    - Data-driven approach based on patterns
+    - Proactively prevents predictable waste
+    - Learns and improves over time
+    
+    Cons:
+    - Requires historical data to be effective
+    - May struggle with new stores or unusual events
+    - Predictions can be wrong
+    
+    Time Complexity: O(S log S) for sorting
+    Technique: Greedy with predictive scoring
+    
     Args:
         stores_df (DataFrame): Store data
         n (int): Number of stores to display
         current_bags (dict): {store_id: remaining_bags}
-        customer_valuations (dict): {store_id: predicted_rating} for the specific customer
-
+        demand_forecast (dict): {store_id: expected_remaining_demand} or None
+        
     Returns:
-        list: Top n store IDs
+        list: Store IDs with highest supply-demand imbalance
     """
-    # 1. Filter to stores with available bags
     available_ids = [sid for sid, bags in current_bags.items() if bags > 0]
     if not available_ids:
         return []
+    
+    available = stores_df[stores_df['store_id'].isin(available_ids)]
+    
+    # Generate simple demand forecast if not provided
+    if demand_forecast is None:
+        demand_forecast = {}
+        for _, row in available.iterrows():
+            sid = row['store_id']
+            rating = row['average_overall_rating']
 
-    available = stores_df[stores_df['store_id'].isin(available_ids)].copy()
+            # Simple forecast: higher-rated stores have higher demand
+            # Base demand = rating * 2 (so 5-star expects ~10 customers)
+            base_demand = rating * 2
 
-    # 2. Pre-calculate max bags for normalization
-    # We use log normalization to prevent stores with massive stock from 
-    # completely burying 5-star stores with moderate stock.
-    max_bags = max([current_bags[sid] for sid in available_ids]) if available_ids else 1
-    log_max = math.log1p(max_bags)  # log1p is log(1+x)
+            # Use deterministic variation based on store_id (no random calls!)
+            # This avoids corrupting the simulation's random state
+            # Hash-based variation: consistent per store, range 0.7-1.3
+            variation = 0.7 + (hash(str(sid)) % 1000) / 1000.0 * 0.6
 
+            demand_forecast[sid] = base_demand * variation
+    
+    max_bags = max(current_bags[sid] for sid in available_ids)
+    
     scores = []
     for _, row in available.iterrows():
         sid = row['store_id']
-        inventory = current_bags[sid]
-
-        # A. PERSONALIZATION (Maximize Satisfaction KPI)
-        # If we know what THIS customer likes, use that. Otherwise use average.
-        if customer_valuations and sid in customer_valuations:
-            base_rating = customer_valuations[sid]
-        else:
-            base_rating = row['average_overall_rating']
-
-        # B. SUPPLY URGENCY (Maximize Sold Bags KPI)
-        # Logarithmic boost: distinct advantage for having stock, 
-        # but 100 bags isn't 100x better than 1 bag.
-        supply_index = math.log1p(inventory) / log_max if log_max > 0 else 0
-
-        # FINAL SCORE
-        # We weight Rating heavily (it's the base) and add up to 50% boost from Supply.
-        score = base_rating * (1.0 + (0.5 * supply_index))
+        rating = row['average_overall_rating']
+        current_supply = current_bags[sid]
+        predicted_demand = demand_forecast.get(sid, rating * 2)  # fallback
         
-        scores.append((sid, score))
-
-    # 3. Sort and Return
-    scores.sort(key=lambda x: x[1], reverse=True)
-    return [sid for sid, _ in scores[:n]]
-
-
+        # Calculate supply-demand imbalance
+        imbalance = current_supply - predicted_demand
+        
+        # Relative imbalance (what % of supply is excess?)
+        if current_supply > 0:
+            relative_imbalance = imbalance / current_supply
+        else:
+            relative_imbalance = 0
+        
+        # Risk score: how likely is waste?
+        # Positive imbalance = oversupply (waste risk)
+        # Negative imbalance = undersupply (will sell out)
+        waste_risk = max(0, imbalance) / max(1, current_supply)
+        
+        # Normalize components
+        rating_norm = rating / 5.0
+        supply_norm = current_supply / max_bags
+        
+        # Scoring: prioritize stores with supply > demand
+        if imbalance > 0:
+            # Oversupplied: high priority to prevent waste
+            imbalance_score = min(1.0, imbalance / max_bags)
+            score = (
+                0.50 * imbalance_score +    # Supply-demand gap
+                0.30 * waste_risk +          # Waste probability
+                0.20 * rating_norm           # Maintain quality
+            )
+        else:
+            # Undersupplied or balanced: lower priority
+            score = (
+                0.30 * supply_norm +         # Current inventory
+                0.70 * rating_norm           # Focus on quality
+            ) * 0.5  # Reduce score for undersupplied stores
+        
+        scores.append({
+            'store_id': sid,
+            'score': score,
+            'supply': current_supply,
+            'demand': predicted_demand,
+            'imbalance': imbalance
+        })
+    
+    # Sort by score descending
+    scores.sort(key=lambda x: x['score'], reverse=True)
+    
+    return [s['store_id'] for s in scores[:n]]
 
 
 def geographic_load_balancer(stores_df, n, current_bags, customer_valuations=None, zone_mapping=None):
@@ -2332,325 +2391,6 @@ def personalized_ultimate(stores_df, n, current_bags, customer_valuations=None):
     return [sid for sid, _ in scores[:n]]
 
 
-# =============================================================================
-# GENETIC ALGORITHM FOR STORE RANKING OPTIMIZATION
-# =============================================================================
-# This algorithm uses evolutionary optimization to find the best weights
-# for ranking stores. It evolves a population of weight vectors to maximize
-# revenue and minimize waste.
-#
-# Chromosome Structure: [weight_rating, weight_price, weight_inventory, weight_waste_risk]
-# =============================================================================
-
-# Global cache for evolved weights (persists across calls within a session)
-_GA_EVOLVED_WEIGHTS = None
-_GA_GENERATION_COUNT = 0
-
-
-def _normalize_weights(weights):
-    """Normalize weights to sum to 1."""
-    total = sum(abs(w) for w in weights)
-    if total == 0:
-        return [0.25, 0.25, 0.25, 0.25]
-    return [w / total for w in weights]
-
-
-def _calculate_all_store_scores_ga(available_ids, store_data, current_bags, weights, max_bags, max_price):
-    """
-    Calculate scores for ALL stores at once using pre-computed data.
-    
-    This is the optimized vectorized version that avoids DataFrame lookups.
-    
-    Args:
-        available_ids: List of store IDs with available bags
-        store_data: Dict {store_id: (rating, price)} - pre-computed
-        current_bags: Dict {store_id: bags}
-        weights: [w_rating, w_price, w_inventory, w_waste_risk]
-        max_bags: Maximum bags among available stores
-        max_price: Maximum price among stores
-    
-    Returns:
-        List of (store_id, score) tuples
-    """
-    w_rating, w_price, w_inventory, w_waste_risk = _normalize_weights(weights)
-    
-    scores = []
-    for sid in available_ids:
-        rating, price = store_data[sid]
-        inventory = current_bags.get(sid, 0)
-        
-        # Normalize to 0-1 scale
-        norm_rating = rating / 5.0
-        norm_price = 1 - (price / max_price) if max_price > 0 else 0.5
-        norm_inventory = inventory / max_bags if max_bags > 0 else 0
-        
-        # Waste risk calculation
-        expected_demand = max(1.0, (rating / 5.0) * 5)
-        waste_risk = min(1.0, inventory / (expected_demand * 3))
-        
-        score = (w_rating * norm_rating + 
-                w_price * norm_price + 
-                w_inventory * norm_inventory + 
-                w_waste_risk * waste_risk)
-        
-        scores.append((sid, score, inventory, rating, price))
-    
-    return scores
-
-
-def _create_random_chromosome():
-    """Create random weights [rating, price, inventory, waste_risk]."""
-    return [random.uniform(0, 1) for _ in range(4)]
-
-
-def _crossover(parent1, parent2):
-    """Blend crossover - weighted average of parents."""
-    child = []
-    for p1, p2 in zip(parent1, parent2):
-        alpha = random.uniform(0.3, 0.7)
-        gene = alpha * p1 + (1 - alpha) * p2
-        child.append(gene)
-    return child
-
-
-def _mutate(chromosome, mutation_rate=0.4, mutation_strength=0.3):
-    """Apply Gaussian mutation to chromosome."""
-    mutated = chromosome.copy()
-    for i in range(len(mutated)):
-        if random.random() < mutation_rate:
-            mutated[i] += random.gauss(0, mutation_strength)
-            mutated[i] = max(0, min(1, mutated[i]))
-    return mutated
-
-
-def _evaluate_chromosome_fast(chromosome, available_ids, store_data, current_bags, n, max_bags, max_price):
-    """
-    Fast chromosome evaluation using pre-computed store data.
-    
-    Fitness = Prioritizes high-inventory stores with good ratings
-              to maximize potential sales and minimize waste.
-    """
-    if not available_ids:
-        return 0
-    
-    # Score all stores using vectorized function
-    scores = _calculate_all_store_scores_ga(
-        available_ids, store_data, current_bags, chromosome, max_bags, max_price
-    )
-    
-    # Sort by score and select top n
-    scores.sort(key=lambda x: x[1], reverse=True)
-    selected = scores[:n]
-    
-    # Fitness calculation using pre-computed data
-    fitness = 0
-    for sid, score, inventory, rating, price in selected:
-        revenue_potential = (rating / 5.0) * price * inventory
-        waste_prevention = inventory * 10
-        fitness += revenue_potential + waste_prevention
-    
-    return fitness
-
-
-def _evolve_population(population, fitness_scores, population_size=20):
-    """Evolve population using tournament selection."""
-    sorted_pairs = sorted(zip(fitness_scores, population), key=lambda x: x[0], reverse=True)
-    sorted_pop = [p for _, p in sorted_pairs]
-    
-    new_population = []
-    
-    # Elitism: keep top 2
-    new_population.append(sorted_pop[0].copy())
-    if len(sorted_pop) > 1:
-        new_population.append(sorted_pop[1].copy())
-    
-    # Tournament selection for the rest
-    while len(new_population) < population_size:
-        tournament_size = 3
-        if len(population) >= tournament_size:
-            tournament = random.sample(list(zip(fitness_scores, population)), tournament_size)
-            parent1 = max(tournament, key=lambda x: x[0])[1]
-            
-            tournament = random.sample(list(zip(fitness_scores, population)), tournament_size)
-            parent2 = max(tournament, key=lambda x: x[0])[1]
-        else:
-            parent1 = random.choice(population)
-            parent2 = random.choice(population)
-        
-        child = _mutate(_crossover(parent1, parent2))
-        new_population.append(child)
-    
-    # Add some random chromosomes for diversity
-    if len(new_population) >= 3:
-        new_population[-1] = _create_random_chromosome()
-    
-    return new_population[:population_size]
-
-
-def genetic_algorithm_ranking(stores_df, n, current_bags, customer_valuations=None):
-    """
-    GENETIC ALGORITHM: Evolutionary optimization for store ranking.
-    
-    Key Innovation: Uses evolutionary computation to find optimal weights
-    for balancing multiple objectives:
-    1. Store rating (customer satisfaction)
-    2. Price (value for customers)
-    3. Inventory level (waste prevention)
-    4. Waste risk (urgency of selling)
-    
-    Chromosome Structure: [w_rating, w_price, w_inventory, w_waste_risk]
-    
-    The algorithm evolves these weights over time, learning which factors
-    matter most for maximizing revenue and minimizing waste.
-    
-    Evolution Strategy:
-    - Population of 20 weight vectors
-    - Tournament selection (size 3)
-    - Blend crossover (alpha 0.3-0.7)
-    - Gaussian mutation (rate 40%, strength 0.3)
-    - Elitism (keep top 2)
-    
-    Fitness Function:
-        fitness = sum(revenue_potential + waste_prevention_bonus)
-        where:
-            revenue_potential = (rating/5) * price * inventory
-            waste_prevention_bonus = inventory * 10
-    
-    This incentivizes selecting stores that:
-    - Have high ratings (will sell)
-    - Have high inventory (need to sell to prevent waste)
-    - Offer good value (price consideration)
-    
-    Time Complexity: O(P * S * n) where P = population size, S = stores
-    Technique: Genetic Algorithm (Evolutionary Computation)
-    
-    Args:
-        stores_df (DataFrame): Store data with ratings, prices
-        n (int): Number of stores to display
-        current_bags (dict): {store_id: remaining_bags}
-        
-    Returns:
-        list: Top n store IDs selected by evolved strategy
-    """
-    global _GA_EVOLVED_WEIGHTS, _GA_GENERATION_COUNT
-    
-    available_ids = [sid for sid, bags in current_bags.items() if bags > 0]
-    if not available_ids:
-        return []
-    
-    if len(available_ids) <= n:
-        return available_ids
-    
-    # === PRE-COMPUTE STORE DATA ONCE ===
-    # This is the key optimization: extract all needed data upfront
-    # instead of doing DataFrame lookups in every loop
-    if 'price' in stores_df.columns:
-        store_data = {
-            row['store_id']: (row['average_overall_rating'], row['price'])
-            for _, row in stores_df.iterrows()
-        }
-    else:
-        store_data = {
-            row['store_id']: (row['average_overall_rating'], 50)
-            for _, row in stores_df.iterrows()
-        }
-    
-    max_price = max(price for _, price in store_data.values()) if store_data else 75
-    max_bags = max(current_bags.get(sid, 0) for sid in available_ids)
-    
-    # GA Parameters - reduced for speed
-    POPULATION_SIZE = 10  # Reduced from 20
-    GENERATIONS_PER_CALL = 2  # Reduced from 3
-    
-    # Initialize or continue evolution
-    if _GA_EVOLVED_WEIGHTS is None:
-        # First call - initialize population
-        population = [_create_random_chromosome() for _ in range(POPULATION_SIZE)]
-    else:
-        # Continue from previous best + new random individuals
-        population = [_GA_EVOLVED_WEIGHTS.copy()]
-        population.extend([_create_random_chromosome() for _ in range(POPULATION_SIZE - 1)])
-    
-    # Evolve for a few generations
-    best_chromosome = population[0]
-    best_fitness = -float('inf')
-    
-    for gen in range(GENERATIONS_PER_CALL):
-        # Evaluate all chromosomes using fast evaluation
-        fitness_scores = []
-        for chromosome in population:
-            fitness = _evaluate_chromosome_fast(
-                chromosome, available_ids, store_data, current_bags, n, max_bags, max_price
-            )
-            fitness_scores.append(fitness)
-            
-            if fitness > best_fitness:
-                best_fitness = fitness
-                best_chromosome = chromosome.copy()
-        
-        # Evolve population
-        population = _evolve_population(population, fitness_scores, POPULATION_SIZE)
-    
-    # Save best weights for next call
-    _GA_EVOLVED_WEIGHTS = best_chromosome.copy()
-    _GA_GENERATION_COUNT += GENERATIONS_PER_CALL
-    
-    # Use best chromosome to rank stores - reuse pre-computed data
-    scores = _calculate_all_store_scores_ga(
-        available_ids, store_data, current_bags, best_chromosome, max_bags, max_price
-    )
-    
-    scores.sort(key=lambda x: x[1], reverse=True)
-    return [sid for sid, _, _, _, _ in scores[:n]]
-
-
-def reset_genetic_algorithm():
-    """
-    Reset the genetic algorithm's evolved weights.
-    
-    Call this to start fresh evolution, for example when:
-    - Testing different scenarios
-    - Starting a new simulation run
-    - Comparing GA performance from scratch
-    """
-    global _GA_EVOLVED_WEIGHTS, _GA_GENERATION_COUNT
-    _GA_EVOLVED_WEIGHTS = None
-    _GA_GENERATION_COUNT = 0
-
-
-def get_ga_evolved_weights():
-    """
-    Get the current evolved weights from the genetic algorithm.
-    
-    Returns:
-        dict: Current weights and generation count, or None if not evolved yet
-    """
-    global _GA_EVOLVED_WEIGHTS, _GA_GENERATION_COUNT
-    
-    if _GA_EVOLVED_WEIGHTS is None:
-        return None
-    
-    weights = _normalize_weights(_GA_EVOLVED_WEIGHTS)
-    return {
-        'rating_weight': weights[0],
-        'price_weight': weights[1],
-        'inventory_weight': weights[2],
-        'waste_risk_weight': weights[3],
-        'generations_evolved': _GA_GENERATION_COUNT,
-        'raw_weights': _GA_EVOLVED_WEIGHTS.copy()
-    }
-
-# =============================================================================
-# GENETIC ALGORITHM FOR STORE RANKING OPTIMIZATION
-# =============================================================================
-# This algorithm uses evolutionary optimization to find the best weights
-# for ranking stores. It evolves a population of weight vectors to maximize
-# revenue and minimize waste.
-#
-# Chromosome Structure: [weight_rating, weight_price, weight_inventory, weight_waste_risk]
-# =============================================================================
-
-
 ALGORITHMS = {
     'Greedy Baseline': greedy_baseline,
     'Inventory Aware': inventory_aware,
@@ -2673,8 +2413,6 @@ ALGORITHMS = {
     'Personalized Diverse': personalized_diverse,
     'Personalized Reliable': personalized_reliable,
     'Personalized Ultimate': personalized_ultimate,
-    # GENETIC ALGORITHM - Evolutionary optimization for store ranking
-    'Genetic Algorithm': genetic_algorithm_ranking,
 }
 
 def register_accuracy_aware_algorithm(accuracy_tracker, name='Accuracy Aware'):
