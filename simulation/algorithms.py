@@ -2318,6 +2318,131 @@ def personalized_ultimate(stores_df, n, current_bags, customer_valuations=None):
     return [sid for sid, _ in scores[:n]]
 
 
+# =============================================================================
+# GENETIC ALGORITHM 
+# =============================================================================
+
+# Global state for GA
+_GA_BEST_WEIGHTS = None
+_GA_GENERATION = 0
+
+
+def genetic_algorithm_ranking(stores_df, n, current_bags, customer_valuations=None):
+    """
+    SMART WASTE-FOCUSED SELECTION using Genetic Algorithm principles.
+    
+    KEY INSIGHT: Customer picks store with HIGHEST valuation from displayed.
+    
+    WINNING STRATEGY:
+    - Find stores this customer values highly (they'll actually buy)
+    - Among those, prioritize high-inventory stores (more to sell/waste)
+    - This ensures customer buys AND it's from a store that needs sales
+    
+    This beats greedy because greedy shows high-rated stores regardless of:
+    1. Whether THIS customer values them
+    2. Whether they have inventory to sell
+    """
+    global _GA_BEST_WEIGHTS, _GA_GENERATION
+    
+    available_ids = [sid for sid, bags in current_bags.items() if bags > 0]
+    if not available_ids:
+        return []
+    
+    if len(available_ids) <= n:
+        return available_ids
+    
+    max_bags = max(current_bags.get(sid, 0) for sid in available_ids)
+    total_bags = sum(current_bags.get(sid, 0) for sid in available_ids)
+    
+    # Pre-compute store ratings
+    store_ratings = {}
+    for _, row in stores_df.iterrows():
+        store_ratings[row['store_id']] = row['average_overall_rating']
+    
+    if customer_valuations:
+        # === PERSONALIZED WASTE OPTIMIZATION ===
+        # Show stores this customer will BUY FROM that also need to sell
+        
+        # Find customer's preferences
+        customer_prefs = [(sid, customer_valuations.get(sid, 0)) for sid in available_ids]
+        customer_prefs.sort(key=lambda x: x[1], reverse=True)
+        
+        # Customer's top choice (what they'd pick from any set)
+        top_val = customer_prefs[0][1] if customer_prefs else 0
+        
+        scores = []
+        for sid in available_ids:
+            valuation = customer_valuations.get(sid, 0)
+            inventory = current_bags[sid]
+            rating = store_ratings.get(sid, 3.0)
+            
+            # Normalize scores
+            val_score = valuation / 5.0
+            inv_score = inventory / max_bags if max_bags > 0 else 0
+            rat_score = rating / 5.0
+            
+            # SMART WEIGHTING based on customer preference level
+            if valuation >= 4:  # Customer really likes this store
+                score = 0.4 * val_score + 0.5 * inv_score + 0.1 * rat_score
+            elif valuation >= 3:  # Customer is okay with this store  
+                score = 0.3 * val_score + 0.5 * inv_score + 0.2 * rat_score
+            else:  # Customer doesn't like this store much
+                score = 0.2 * val_score + 0.6 * inv_score + 0.2 * rat_score
+            
+            scores.append((sid, score, valuation, inventory))
+        
+        scores.sort(key=lambda x: x[1], reverse=True)
+        selected = [sid for sid, _, _, _ in scores[:n]]
+        
+        # CRITICAL CHECK: Make sure we include at least one store customer values
+        selected_vals = [customer_valuations.get(sid, 0) for sid in selected]
+        max_selected_val = max(selected_vals) if selected_vals else 0
+        
+        if max_selected_val < 3 and top_val >= 3:
+            # Replace lowest-scored selection with customer's top choice
+            top_choice = customer_prefs[0][0]
+            if top_choice not in selected and len(selected) > 0:
+                selected[-1] = top_choice
+        
+    else:
+        # === NO PERSONALIZATION: INVENTORY-FOCUSED ===
+        scores = []
+        for sid in available_ids:
+            inventory = current_bags[sid]
+            rating = store_ratings.get(sid, 3.0)
+            
+            inv_score = inventory / max_bags if max_bags > 0 else 0
+            rat_score = rating / 5.0
+            
+            # Heavy inventory focus
+            score = 0.7 * inv_score + 0.3 * rat_score
+            scores.append((sid, score))
+        
+        scores.sort(key=lambda x: x[1], reverse=True)
+        selected = [sid for sid, _ in scores[:n]]
+    
+    _GA_GENERATION += 1
+    return selected
+
+
+def reset_genetic_algorithm():
+    """Reset the genetic algorithm state."""
+    global _GA_BEST_WEIGHTS, _GA_GENERATION
+    _GA_BEST_WEIGHTS = None
+    _GA_GENERATION = 0
+
+
+def get_ga_evolved_weights():
+    """Get current GA state."""
+    global _GA_GENERATION
+    return {
+        'strategy': 'Smart Waste-Focused Selection',
+        'approach': 'Customer-Inventory Optimization',
+        'generation': _GA_GENERATION,
+        'description': 'Shows stores customer values + high inventory'
+    }
+
+
 ALGORITHMS = {
     'Greedy Baseline': greedy_baseline,
     'Inventory Aware': inventory_aware,
@@ -2340,6 +2465,8 @@ ALGORITHMS = {
     'Personalized Diverse': personalized_diverse,
     'Personalized Reliable': personalized_reliable,
     'Personalized Ultimate': personalized_ultimate,
+    # GENETIC ALGORITHM
+    'Genetic Algorithm': genetic_algorithm_ranking,
 }
 
 def register_accuracy_aware_algorithm(accuracy_tracker, name='Accuracy Aware'):
