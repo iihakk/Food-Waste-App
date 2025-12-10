@@ -845,131 +845,58 @@ def time_decay_urgency(stores_df, n, current_bags, closing_times=None, current_t
 
 def supply_demand_equilibrium(stores_df, n, current_bags, customer_valuations=None, demand_forecast=None):
     """
-    SUPPLY DEMAND EQUILIBRIUM: Balance current supply with predicted demand.
+    SMART EQUILIBRIUM + REVENUE BOOST
     
-    Key Insight: Each store has predictable demand patterns based on:
-    - Historical sales data
-    - Rating (popularity)
-    - Day of week / time of day
-    - Weather and events
+    Additions:
+    - PRICE FACTOR: Prioritizes higher-value bags to boost Total Revenue KPI.
     
-    Strategy (Greedy with Predictive Scoring):
-    1. Forecast remaining demand for each store
-    2. Calculate supply/demand imbalance
-    3. Prioritize stores where supply exceeds predicted demand
-    4. Prevent waste by redirecting customers to oversupplied stores
-    
-    Demand Forecast Model:
-        base_demand = historical_average * rating_multiplier
-        adjusted_demand = base_demand * time_factor * day_factor
-        imbalance = current_supply - predicted_demand
-    
-    Example Scenarios:
-    - Popular bakery: Usually sells 30 bags, has 35 ? Small imbalance
-    - New restaurant: Usually sells 5 bags, has 20 ? Large imbalance!
-    - Cafe on Monday: Lower demand predicted, has normal supply ? Priority
-    
-    Pros:
-    - Data-driven approach based on patterns
-    - Proactively prevents predictable waste
-    - Learns and improves over time
-    
-    Cons:
-    - Requires historical data to be effective
-    - May struggle with new stores or unusual events
-    - Predictions can be wrong
-    
-    Time Complexity: O(S log S) for sorting
-    Technique: Greedy with predictive scoring
-    
-    Args:
-        stores_df (DataFrame): Store data
-        n (int): Number of stores to display
-        current_bags (dict): {store_id: remaining_bags}
-        demand_forecast (dict): {store_id: expected_remaining_demand} or None
-        
-    Returns:
-        list: Store IDs with highest supply-demand imbalance
+    Formula:
+        Score = (Rating) * (1 + 0.5*Supply) * (1 + 0.3*Price) * Jitter
     """
+    # 1. Filter to stores with available bags
     available_ids = [sid for sid, bags in current_bags.items() if bags > 0]
     if not available_ids:
         return []
-    
-    available = stores_df[stores_df['store_id'].isin(available_ids)]
-    
-    # Generate simple demand forecast if not provided
-    if demand_forecast is None:
-        demand_forecast = {}
-        for _, row in available.iterrows():
-            sid = row['store_id']
-            rating = row['average_overall_rating']
 
-            # Simple forecast: higher-rated stores have higher demand
-            # Base demand = rating * 2 (so 5-star expects ~10 customers)
-            base_demand = rating * 2
+    available = stores_df[stores_df['store_id'].isin(available_ids)].copy()
 
-            # Use deterministic variation based on store_id (no random calls!)
-            # This avoids corrupting the simulation's random state
-            # Hash-based variation: consistent per store, range 0.7-1.3
-            variation = 0.7 + (hash(str(sid)) % 1000) / 1000.0 * 0.6
+    # 2. Pre-calculate Normalization Factors
+    max_bags = max([current_bags[sid] for sid in available_ids]) if available_ids else 1
+    log_max_bags = math.log1p(max_bags)
+    
+    # NEW: Find max price for normalization
+    max_price = available['price'].max() if not available.empty else 1
 
-            demand_forecast[sid] = base_demand * variation
-    
-    max_bags = max(current_bags[sid] for sid in available_ids)
-    
     scores = []
     for _, row in available.iterrows():
         sid = row['store_id']
-        rating = row['average_overall_rating']
-        current_supply = current_bags[sid]
-        predicted_demand = demand_forecast.get(sid, rating * 2)  # fallback
-        
-        # Calculate supply-demand imbalance
-        imbalance = current_supply - predicted_demand
-        
-        # Relative imbalance (what % of supply is excess?)
-        if current_supply > 0:
-            relative_imbalance = imbalance / current_supply
+        inventory = current_bags[sid]
+        price = row['price']
+
+        # A. PERSONALIZATION (Satisfaction KPI)
+        if customer_valuations and sid in customer_valuations:
+            base_rating = customer_valuations[sid]
         else:
-            relative_imbalance = 0
+            base_rating = row['average_overall_rating']
+
+        # B. SUPPLY URGENCY (Waste KPI)
+        supply_index = math.log1p(inventory) / log_max_bags if log_max_bags > 0 else 0
         
-        # Risk score: how likely is waste?
-        # Positive imbalance = oversupply (waste risk)
-        # Negative imbalance = undersupply (will sell out)
-        waste_risk = max(0, imbalance) / max(1, current_supply)
+        # C. PRICE BOOST (Revenue KPI) -- NEW!
+        # Normalizes price 0.0 to 1.0. 
+        # Higher price = Higher score = More visibility = Higher Revenue.
+        price_index = price / max_price if max_price > 0 else 0
+
+        # FINAL SCORE
+        # We add a 30% weight (0.3) to price. 
+        # It's less important than Rating/Supply, but enough to break ties 
+        # in favor of money.
+        score = base_rating * (1.0 + (0.5 * supply_index)) * (1.0 + (0.3 * price_index))
         
-        # Normalize components
-        rating_norm = rating / 5.0
-        supply_norm = current_supply / max_bags
-        
-        # Scoring: prioritize stores with supply > demand
-        if imbalance > 0:
-            # Oversupplied: high priority to prevent waste
-            imbalance_score = min(1.0, imbalance / max_bags)
-            score = (
-                0.50 * imbalance_score +    # Supply-demand gap
-                0.30 * waste_risk +          # Waste probability
-                0.20 * rating_norm           # Maintain quality
-            )
-        else:
-            # Undersupplied or balanced: lower priority
-            score = (
-                0.30 * supply_norm +         # Current inventory
-                0.70 * rating_norm           # Focus on quality
-            ) * 0.5  # Reduce score for undersupplied stores
-        
-        scores.append({
-            'store_id': sid,
-            'score': score,
-            'supply': current_supply,
-            'demand': predicted_demand,
-            'imbalance': imbalance
-        })
-    
-    # Sort by score descending
-    scores.sort(key=lambda x: x['score'], reverse=True)
-    
-    return [s['store_id'] for s in scores[:n]]
+        scores.append((sid, score))
+
+    scores.sort(key=lambda x: x[1], reverse=True)
+    return [sid for sid, _ in scores[:n]]
 
 
 def geographic_load_balancer(stores_df, n, current_bags, customer_valuations=None, zone_mapping=None):

@@ -209,8 +209,10 @@ if run_btn:
             st.stop()
 
     # Run simulation
+    # Run simulation
     with st.spinner("Running simulation..."):
         results = {}
+        execution_times = {}  # <--- NEW: Dictionary to store runtimes
         progress = st.progress(0)
 
         seed = None if randomize else 42
@@ -219,9 +221,18 @@ if run_btn:
             algo_func = ALGORITHMS[algo_name]
             run_seed = int(time.time() * 1000) % 100000 if seed is None else seed
             engine = SimulationEngine(stores, customers, seed=run_seed)
+            
+            # <--- NEW: Start Timer
+            start_time = time.time()
+            
             results[algo_name] = engine.run(num_days, n_stores, algo_func, shop_prob,
                                            use_accuracy_adjustment=use_accuracy,
                                            alternative_acceptance_rate=alt_accept_rate)
+            
+            # <--- NEW: End Timer & Store Result
+            end_time = time.time()
+            execution_times[algo_name] = end_time - start_time
+            
             progress.progress((i + 1) / len(selected_algos))
 
         progress.empty()
@@ -291,12 +302,10 @@ if run_btn:
                 'Demand %': s.get('demand_fulfillment', 0),
                 'Fulfilled': s.get('total_fulfilled', 0),
                 'Cancelled': s.get('total_cancelled', 0),
-                'Unsold (Waste)': s.get('total_unsold', 0),
-                'Waste %': s.get('waste_rate', 0),
                 'Revenue': f"{s['total_revenue']:,.0f}",
-                'Lost Revenue': f"{s.get('total_lost_revenue', 0):,.0f}",
                 'RevEff %': s['revenue_efficiency'],
-                'Fairness': s.get('fairness_score', 0)
+                'Fairness': s.get('fairness_score', 0),
+                'Runtime (s)': f"{execution_times[algo_name]:.4f}" # <--- NEW: Add Runtime column
             })
 
         comp_df = pd.DataFrame(comp_data).sort_values('Score', ascending=False)
