@@ -2355,36 +2355,47 @@ def _normalize_weights(weights):
     return [w / total for w in weights]
 
 
-def _calculate_store_score_ga(store_id, stores_df, current_bags, weights, prices_dict, max_bags, max_price):
+def _calculate_all_store_scores_ga(available_ids, store_data, current_bags, weights, max_bags, max_price):
     """
-    Calculate composite score for a store based on weighted factors.
+    Calculate scores for ALL stores at once using pre-computed data.
     
-    Weights: [rating, price, inventory, waste_risk]
+    This is the optimized vectorized version that avoids DataFrame lookups.
+    
+    Args:
+        available_ids: List of store IDs with available bags
+        store_data: Dict {store_id: (rating, price)} - pre-computed
+        current_bags: Dict {store_id: bags}
+        weights: [w_rating, w_price, w_inventory, w_waste_risk]
+        max_bags: Maximum bags among available stores
+        max_price: Maximum price among stores
+    
+    Returns:
+        List of (store_id, score) tuples
     """
     w_rating, w_price, w_inventory, w_waste_risk = _normalize_weights(weights)
     
-    store_row = stores_df[stores_df['store_id'] == store_id].iloc[0]
-    rating = store_row['average_overall_rating']
-    price = prices_dict.get(store_id, store_row.get('price', 50))
-    inventory = current_bags.get(store_id, 0)
+    scores = []
+    for sid in available_ids:
+        rating, price = store_data[sid]
+        inventory = current_bags.get(sid, 0)
+        
+        # Normalize to 0-1 scale
+        norm_rating = rating / 5.0
+        norm_price = 1 - (price / max_price) if max_price > 0 else 0.5
+        norm_inventory = inventory / max_bags if max_bags > 0 else 0
+        
+        # Waste risk calculation
+        expected_demand = max(1.0, (rating / 5.0) * 5)
+        waste_risk = min(1.0, inventory / (expected_demand * 3))
+        
+        score = (w_rating * norm_rating + 
+                w_price * norm_price + 
+                w_inventory * norm_inventory + 
+                w_waste_risk * waste_risk)
+        
+        scores.append((sid, score, inventory, rating, price))
     
-    # Normalize to 0-1 scale
-    norm_rating = rating / 5.0
-    # Lower price = higher score (customers prefer cheaper)
-    norm_price = 1 - (price / max_price) if max_price > 0 else 0.5
-    # Higher inventory = higher score (more to sell, prevent waste)
-    norm_inventory = inventory / max_bags if max_bags > 0 else 0
-    
-    # Waste risk: high inventory + lower rating = higher waste risk
-    # We WANT to show stores with high waste risk to prevent waste
-    expected_demand = (rating / 5.0) * 5  # Higher rating = more expected customers
-    expected_demand = max(1.0, expected_demand)
-    waste_risk = min(1.0, inventory / (expected_demand * 3))  # Normalize to 0-1
-    
-    return (w_rating * norm_rating + 
-            w_price * norm_price + 
-            w_inventory * norm_inventory + 
-            w_waste_risk * waste_risk)
+    return scores
 
 
 def _create_random_chromosome():
@@ -2412,49 +2423,30 @@ def _mutate(chromosome, mutation_rate=0.4, mutation_strength=0.3):
     return mutated
 
 
-def _evaluate_chromosome(chromosome, stores_df, current_bags, n):
+def _evaluate_chromosome_fast(chromosome, available_ids, store_data, current_bags, n, max_bags, max_price):
     """
-    Evaluate a chromosome's fitness by simulating store selection.
+    Fast chromosome evaluation using pre-computed store data.
     
     Fitness = Prioritizes high-inventory stores with good ratings
               to maximize potential sales and minimize waste.
     """
-    available_ids = [sid for sid, bags in current_bags.items() if bags > 0]
     if not available_ids:
         return 0
     
-    # Get price info
-    prices_dict = stores_df.set_index('store_id')['price'].to_dict() if 'price' in stores_df.columns else {}
-    max_price = max(prices_dict.values()) if prices_dict else 75
-    max_bags = max(current_bags.get(sid, 0) for sid in available_ids)
-    
-    # Score all stores
-    scores = []
-    for sid in available_ids:
-        score = _calculate_store_score_ga(
-            sid, stores_df, current_bags, chromosome, 
-            prices_dict, max_bags, max_price
-        )
-        scores.append((sid, score, current_bags.get(sid, 0)))
+    # Score all stores using vectorized function
+    scores = _calculate_all_store_scores_ga(
+        available_ids, store_data, current_bags, chromosome, max_bags, max_price
+    )
     
     # Sort by score and select top n
     scores.sort(key=lambda x: x[1], reverse=True)
     selected = scores[:n]
     
-    # Fitness: reward selecting high-inventory stores (waste prevention)
-    # and high-rated stores (revenue potential)
+    # Fitness calculation using pre-computed data
     fitness = 0
-    for sid, score, inventory in selected:
-        store_row = stores_df[stores_df['store_id'] == sid].iloc[0]
-        rating = store_row['average_overall_rating']
-        price = prices_dict.get(sid, 50)
-        
-        # Revenue potential = rating * price * inventory
+    for sid, score, inventory, rating, price in selected:
         revenue_potential = (rating / 5.0) * price * inventory
-        
-        # Waste prevention bonus = high inventory selected
         waste_prevention = inventory * 10
-        
         fitness += revenue_potential + waste_prevention
     
     return fitness
@@ -2536,7 +2528,6 @@ def genetic_algorithm_ranking(stores_df, n, current_bags, customer_valuations=No
         stores_df (DataFrame): Store data with ratings, prices
         n (int): Number of stores to display
         current_bags (dict): {store_id: remaining_bags}
-        customer_valuations (dict): Optional customer preferences
         
     Returns:
         list: Top n store IDs selected by evolved strategy
@@ -2550,9 +2541,26 @@ def genetic_algorithm_ranking(stores_df, n, current_bags, customer_valuations=No
     if len(available_ids) <= n:
         return available_ids
     
-    # GA Parameters
-    POPULATION_SIZE = 20
-    GENERATIONS_PER_CALL = 3  # Quick evolution per call
+    # === PRE-COMPUTE STORE DATA ONCE ===
+    # This is the key optimization: extract all needed data upfront
+    # instead of doing DataFrame lookups in every loop
+    if 'price' in stores_df.columns:
+        store_data = {
+            row['store_id']: (row['average_overall_rating'], row['price'])
+            for _, row in stores_df.iterrows()
+        }
+    else:
+        store_data = {
+            row['store_id']: (row['average_overall_rating'], 50)
+            for _, row in stores_df.iterrows()
+        }
+    
+    max_price = max(price for _, price in store_data.values()) if store_data else 75
+    max_bags = max(current_bags.get(sid, 0) for sid in available_ids)
+    
+    # GA Parameters - reduced for speed
+    POPULATION_SIZE = 10  # Reduced from 20
+    GENERATIONS_PER_CALL = 2  # Reduced from 3
     
     # Initialize or continue evolution
     if _GA_EVOLVED_WEIGHTS is None:
@@ -2568,10 +2576,12 @@ def genetic_algorithm_ranking(stores_df, n, current_bags, customer_valuations=No
     best_fitness = -float('inf')
     
     for gen in range(GENERATIONS_PER_CALL):
-        # Evaluate all chromosomes
+        # Evaluate all chromosomes using fast evaluation
         fitness_scores = []
         for chromosome in population:
-            fitness = _evaluate_chromosome(chromosome, stores_df, current_bags, n)
+            fitness = _evaluate_chromosome_fast(
+                chromosome, available_ids, store_data, current_bags, n, max_bags, max_price
+            )
             fitness_scores.append(fitness)
             
             if fitness > best_fitness:
@@ -2585,101 +2595,13 @@ def genetic_algorithm_ranking(stores_df, n, current_bags, customer_valuations=No
     _GA_EVOLVED_WEIGHTS = best_chromosome.copy()
     _GA_GENERATION_COUNT += GENERATIONS_PER_CALL
     
-    # Use best chromosome to rank stores
-    prices_dict = stores_df.set_index('store_id')['price'].to_dict() if 'price' in stores_df.columns else {}
-    max_price = max(prices_dict.values()) if prices_dict else 75
-    max_bags = max(current_bags.get(sid, 0) for sid in available_ids)
-    
-    scores = []
-    for sid in available_ids:
-        score = _calculate_store_score_ga(
-            sid, stores_df, current_bags, best_chromosome,
-            prices_dict, max_bags, max_price
-        )
-        scores.append((sid, score))
+    # Use best chromosome to rank stores - reuse pre-computed data
+    scores = _calculate_all_store_scores_ga(
+        available_ids, store_data, current_bags, best_chromosome, max_bags, max_price
+    )
     
     scores.sort(key=lambda x: x[1], reverse=True)
-    return [sid for sid, _ in scores[:n]]
-
-
-def genetic_algorithm_with_valuation(stores_df, n, current_bags, customer_valuations=None):
-    """
-    PERSONALIZED GENETIC ALGORITHM: Combines GA optimization with customer preferences.
-    
-    This variant incorporates customer_valuations into the scoring function,
-    creating a personalized ranking that still benefits from evolved weights.
-    
-    Extended Chromosome: [w_rating, w_price, w_inventory, w_waste_risk, w_preference]
-    
-    The preference weight determines how much to prioritize what the customer
-    actually wants vs. what's best for waste prevention.
-    
-    Strategy:
-    1. Use evolved weights for store metrics (rating, price, inventory, waste_risk)
-    2. Add customer preference as a 5th factor
-    3. Balance personalization with platform-wide optimization
-    
-    Formula:
-        base_score = GA_score(rating, price, inventory, waste_risk)
-        final_score = 0.6 * base_score + 0.4 * customer_preference
-    
-    This ensures customers see stores they like while still prioritizing
-    waste prevention and revenue optimization.
-    
-    Time Complexity: O(P * S * n) where P = population size
-    Technique: Genetic Algorithm + Personalization
-    
-    Args:
-        stores_df (DataFrame): Store data
-        n (int): Number of stores to display
-        current_bags (dict): {store_id: remaining_bags}
-        customer_valuations (dict): {store_id: preference_score}
-        
-    Returns:
-        list: Personalized + optimized store IDs
-    """
-    available_ids = [sid for sid, bags in current_bags.items() if bags > 0]
-    if not available_ids:
-        return []
-    
-    if len(available_ids) <= n:
-        return available_ids
-    
-    # If no customer valuations, fall back to standard GA
-    if customer_valuations is None:
-        return genetic_algorithm_ranking(stores_df, n, current_bags)
-    
-    # Get GA-optimized base scores
-    global _GA_EVOLVED_WEIGHTS
-    
-    if _GA_EVOLVED_WEIGHTS is None:
-        # Initialize with balanced weights
-        _GA_EVOLVED_WEIGHTS = [0.25, 0.25, 0.25, 0.25]
-    
-    prices_dict = stores_df.set_index('store_id')['price'].to_dict() if 'price' in stores_df.columns else {}
-    max_price = max(prices_dict.values()) if prices_dict else 75
-    max_bags = max(current_bags.get(sid, 0) for sid in available_ids)
-    
-    scores = []
-    for sid in available_ids:
-        # GA-optimized base score
-        base_score = _calculate_store_score_ga(
-            sid, stores_df, current_bags, _GA_EVOLVED_WEIGHTS,
-            prices_dict, max_bags, max_price
-        )
-        
-        # Customer preference score (normalized)
-        customer_pref = customer_valuations.get(sid, 2.5) / 5.0
-        
-        # Combined score: balance GA optimization with personalization
-        # Higher preference weight = more personalized
-        # Lower preference weight = more platform-optimized (waste reduction)
-        final_score = 0.55 * base_score + 0.45 * customer_pref
-        
-        scores.append((sid, final_score))
-    
-    scores.sort(key=lambda x: x[1], reverse=True)
-    return [sid for sid, _ in scores[:n]]
+    return [sid for sid, _, _, _, _ in scores[:n]]
 
 
 def reset_genetic_algorithm():
@@ -2718,6 +2640,16 @@ def get_ga_evolved_weights():
         'raw_weights': _GA_EVOLVED_WEIGHTS.copy()
     }
 
+# =============================================================================
+# GENETIC ALGORITHM FOR STORE RANKING OPTIMIZATION
+# =============================================================================
+# This algorithm uses evolutionary optimization to find the best weights
+# for ranking stores. It evolves a population of weight vectors to maximize
+# revenue and minimize waste.
+#
+# Chromosome Structure: [weight_rating, weight_price, weight_inventory, weight_waste_risk]
+# =============================================================================
+
 
 ALGORITHMS = {
     'Greedy Baseline': greedy_baseline,
@@ -2743,7 +2675,6 @@ ALGORITHMS = {
     'Personalized Ultimate': personalized_ultimate,
     # GENETIC ALGORITHM - Evolutionary optimization for store ranking
     'Genetic Algorithm': genetic_algorithm_ranking,
-    'GA + Personalized': genetic_algorithm_with_valuation,
 }
 
 def register_accuracy_aware_algorithm(accuracy_tracker, name='Accuracy Aware'):
