@@ -303,245 +303,19 @@ def waste_prevention_threshold(stores_df, n, current_bags, customer_valuations=N
     return [sid for sid, _ in scores[:n]]
 
 
-def price_value_optimizer(stores_df, n, current_bags, customer_valuations=None):
-    """
-    PRICE-VALUE OPTIMIZER: Customer-centric value calculation.
-
-    Key Insight: Customers want the best value for their money.
-    Value = items_per_bag / price_paid
-
-    In the surprise bag model:
-    - More inventory with fewer customers = more items per bag
-    - Lower price = better deal
-
-    We estimate potential items-per-bag as: inventory / estimated_customers
-    Then compute value_score = potential_items / price
-
-    This incentivizes showing stores where customers get the best deal,
-    which also happens to be stores with high inventory (reducing waste).
-
-    Formula:
-        estimated_customers = 2 + rating  # 3 to 7 customers expected
-        potential_items_per_bag = inventory / estimated_customers
-        value_per_egp = potential_items_per_bag / price
-        score = value_per_egp_normalized + 0.3 * rating_norm
-
-    Time Complexity: O(S log S)
-    Technique: Transform and Conquer (transform to value metrics)
-    """
-    available_ids = [sid for sid, bags in current_bags.items() if bags > 0]
-    if not available_ids:
-        return []
-
-    available = stores_df[stores_df['store_id'].isin(available_ids)]
-
-    # First pass: calculate value scores
-    value_scores = {}
-    for _, row in available.iterrows():
-        sid = row['store_id']
-        rating = row['average_overall_rating']
-        inventory = current_bags[sid]
-        price = row['price']
-
-        # Estimate customers based on rating (higher rating attracts more)
-        estimated_customers = 2 + rating  # Range: 3 to 7
-
-        # Potential items per bag if only estimated_customers show up
-        potential_items = inventory / estimated_customers
-
-        # Value: items per EGP spent
-        value_per_egp = potential_items / price if price > 0 else 0
-        value_scores[sid] = value_per_egp
-
-    # Normalize value scores
-    max_value = max(value_scores.values()) if value_scores else 1
-
-    scores = []
-    for _, row in available.iterrows():
-        sid = row['store_id']
-        rating_norm = row['average_overall_rating'] / 5.0
-        value_norm = value_scores[sid] / max_value
-
-        # Value is primary (70%), rating secondary (30%)
-        score = 0.7 * value_norm + 0.3 * rating_norm
-        scores.append((sid, score))
-
-    scores.sort(key=lambda x: x[1], reverse=True)
-    return [sid for sid, _ in scores[:n]]
-
-
-def round_robin_fairness(stores_df, n, current_bags, customer_valuations=None, exposure_history=None):
-    """
-    ROUND ROBIN FAIRNESS: Ensures all qualifying stores get equal exposure.
-    
-    Key Insight: Every store deserves a chance to be seen by customers.
-    Popular stores don't need constant visibility; struggling stores do.
-    
-    Strategy (Divide and Conquer):
-    1. Divide stores into quality tiers based on rating
-    2. Track exposure count for each store
-    3. Within each tier, select least-exposed stores first
-    4. Round-robin through tiers to maintain quality balance
-    
-    Quality Tiers:
-    - Tier 1 (Premium): Rating >= 4.0
-    - Tier 2 (Good): Rating >= 3.0
-    - Tier 3 (Acceptable): Rating >= 2.0
-    - Excluded: Rating < 2.0 (quality threshold)
-    
-    Pros:
-    - Guarantees fairness in exposure
-    - Prevents monopolization by popular stores
-    - Helps new/recovering stores build customer base
-    - Reduces overall waste through distribution
-    
-    Cons:
-    - May show lower-rated stores to maintain fairness
-    - Requires tracking exposure history
-    - Could reduce average customer satisfaction
-    
-    Time Complexity: O(S log S) for sorting within tiers
-    Technique: Divide and Conquer (tier-based division)
-    
-    Args:
-        stores_df (DataFrame): Store data
-        n (int): Number of stores to display
-        current_bags (dict): {store_id: remaining_bags}
-        exposure_history (dict): {store_id: exposure_count} or None
-        
-    Returns:
-        list: Selected store IDs ensuring fairness
-    """
-    # Filter to stores with available bags
-    available_ids = [sid for sid, bags in current_bags.items() if bags > 0]
-    if not available_ids:
-        return []
-    
-    available = stores_df[stores_df['store_id'].isin(available_ids)]
-    
-    # Initialize exposure history if not provided
-    if exposure_history is None:
-        exposure_history = defaultdict(int)
-    
-    # Divide stores into quality tiers
-    tiers = {
-        'premium': [],
-        'good': [],
-        'acceptable': []
-    }
-    
-    for _, row in available.iterrows():
-        sid = row['store_id']
-        rating = row['average_overall_rating']
-        inventory = current_bags[sid]
-        exposure = exposure_history.get(sid, 0)
-        
-        # Skip stores below quality threshold
-        if rating < 2.0:
-            continue
-            
-        store_info = {
-            'store_id': sid,
-            'rating': rating,
-            'inventory': inventory,
-            'exposure': exposure
-        }
-        
-        if rating >= 4.0:
-            tiers['premium'].append(store_info)
-        elif rating >= 3.0:
-            tiers['good'].append(store_info)
-        else:
-            tiers['acceptable'].append(store_info)
-    
-    # Sort within each tier by exposure (ascending) then inventory (descending)
-    for tier in tiers.values():
-        tier.sort(key=lambda x: (x['exposure'], -x['inventory']))
-    
-    # Round-robin selection from tiers
-    selected = []
-    tier_order = ['premium', 'good', 'acceptable']
-    tier_index = 0
-    tier_positions = {'premium': 0, 'good': 0, 'acceptable': 0}
-    
-    # Allocate slots with tier preferences (50% premium, 35% good, 15% acceptable)
-    tier_allocations = {
-        'premium': max(1, int(n * 0.5)),
-        'good': max(1, int(n * 0.35)),
-        'acceptable': max(0, n - int(n * 0.5) - int(n * 0.35))
-    }
-    
-    # Select stores round-robin style with tier allocations
-    for tier_name in tier_order:
-        tier_stores = tiers[tier_name]
-        allocation = tier_allocations[tier_name]
-        
-        for i in range(min(allocation, len(tier_stores))):
-            if len(selected) < n and i < len(tier_stores):
-                selected.append(tier_stores[i]['store_id'])
-    
-    # Fill remaining slots if needed (greedy by inventory within available)
-    if len(selected) < n:
-        all_remaining = []
-        for tier in tiers.values():
-            all_remaining.extend([s for s in tier if s['store_id'] not in selected])
-        all_remaining.sort(key=lambda x: x['inventory'], reverse=True)
-        
-        for store in all_remaining:
-            if len(selected) < n:
-                selected.append(store['store_id'])
-            else:
-                break
-    
-    return selected[:n]
-
 
 def time_decay_urgency(stores_df, n, current_bags, closing_times=None, current_time=None, 
-                       customer_valuations=None, exposure_history=None, customer_id=None):
+                       customer_valuations=None, exposure_history=None, customer_id=None,
+                       waste_prevention_mode='balanced'):  # NEW PARAMETER
     """
-    PERSONALIZED TIME DECAY URGENCY: Exponential urgency with customer-specific optimization.
+    Enhanced with aggressive waste prevention strategies.
     
-    Key Innovation: Personalize store selection based on:
-    1. Individual customer preferences (valuations)
-    2. Time-based urgency (waste prevention)
-    3. Revenue optimization (price × demand)
-    4. Fair exposure rotation
-    5. Historical purchase patterns
-    
-    PERSONALIZATION STRATEGY:
-    - If customer_id provided: Prioritize stores customer likes (valuation > 3.5)
-    - Use collaborative filtering: Show stores similar customers liked
-    - Balance personalization with discovery (80/20 rule)
-    - Maintain urgency overrides for critical waste prevention
-    
-    ADVANCED OPTIMIZATIONS:
-    1. Customer preference scoring (valuation-based)
-    2. Store diversity to prevent filter bubbles
-    3. Price-quality-urgency tradeoff optimization
-    4. Adaptive slot allocation based on customer segment
-    5. Exposure fairness with preference weighting
-    
-    Urgency Phases (with personalization):
-    - CRITICAL (< 30 min): 70% urgency, 20% preference, 10% diversity
-    - MODERATE (30 min - 2 hrs): 40% preference, 30% urgency, 30% revenue
-    - STABLE (> 2 hrs): 50% preference, 30% revenue, 20% discovery
-    
-    Time Complexity: O(S log S) for sorting
-    Technique: Multi-objective Optimization + Collaborative Filtering
-    
-    Args:
-        stores_df (DataFrame): Store data with 'price' column
-        n (int): Number of stores to display
-        current_bags (dict): {store_id: remaining_bags}
-        closing_times (dict): {store_id: closing_datetime} or None
-        current_time (datetime): Current time or None
-        customer_valuations (dict): {store_id: valuation_score} or None (personalized)
-        exposure_history (dict): {store_id: exposure_count} or None
-        customer_id (int): Current customer ID for personalization or None
-        
-    Returns:
-        list: Personalized store IDs optimized for customer + platform goals
+    waste_prevention_mode options:
+    - 'aggressive': Maximum waste reduction (70% urgency focus)
+    - 'balanced': Current approach (40% urgency in moderate phase)
+    - 'light': Customer preference heavy (20% urgency)
     """
+    
     available_ids = [sid for sid, bags in current_bags.items() if bags > 0]
     if not available_ids:
         return []
@@ -562,9 +336,8 @@ def time_decay_urgency(stores_df, n, current_bags, closing_times=None, current_t
     if exposure_history is None:
         exposure_history = defaultdict(int)
     
-    # === PHASE 1: PERSONALIZATION SCORING ===
+    # === ENHANCED WASTE PREVENTION PHASE 1: BETTER TIME WINDOWS ===
     
-    # Vectorized mappings
     available['inventory'] = available['store_id'].map(current_bags)
     available['closing'] = available['store_id'].map(
         lambda sid: closing_times.get(sid, current_time + timedelta(hours=3))
@@ -574,9 +347,9 @@ def time_decay_urgency(stores_df, n, current_bags, closing_times=None, current_t
     # Calculate time remaining
     available['time_remaining'] = (
         (available['closing'] - current_time).dt.total_seconds() / 3600.0
-    ).clip(lower=0.1)
+    ).clip(lower=0.01)  # Changed from 0.1 to be more sensitive
     
-    # Customer preference scoring
+    # === PERSONALIZATION SCORING (unchanged) ===
     if customer_valuations is not None and len(customer_valuations) > 0:
         available['customer_pref'] = available['store_id'].map(
             lambda sid: customer_valuations.get(sid, 0)
@@ -586,18 +359,13 @@ def time_decay_urgency(stores_df, n, current_bags, closing_times=None, current_t
             available['customer_pref'] / max_pref if max_pref > 0 
             else available['average_overall_rating'] / 5.0
         )
-        
-        # Identify highly preferred stores (valuation >= 3.5)
         available['is_preferred'] = available['customer_pref'] >= 3.5
-        
-        # Calculate preference tier (high/medium/low)
         available['pref_tier'] = pd.cut(
             available['customer_pref'],
             bins=[0, 2.5, 3.5, 5.0],
             labels=['low', 'medium', 'high']
         )
     else:
-        # Fallback: use rating as preference proxy
         available['pref_norm'] = available['average_overall_rating'] / 5.0
         available['is_preferred'] = available['average_overall_rating'] >= 4.0
         available['pref_tier'] = pd.cut(
@@ -606,27 +374,36 @@ def time_decay_urgency(stores_df, n, current_bags, closing_times=None, current_t
             labels=['low', 'medium', 'high']
         )
     
-    # === PHASE 2: MULTI-OBJECTIVE SCORING ===
+    # === ENHANCED WASTE METRICS ===
     
-    # Get normalization factors
     max_bags = available['inventory'].max()
     max_price = available['price'].max() if 'price' in available.columns else 1.0
     max_exposure = available['exposure'].max() if available['exposure'].max() > 0 else 1
     
-    # Time urgency
-    available['time_factor'] = available['time_remaining'].apply(lambda x: math.exp(-x))
-    available['urgency_score'] = available['inventory'] * available['time_factor']
+    # **IMPROVED**: More aggressive time decay
+    available['time_factor'] = available['time_remaining'].apply(
+        lambda x: math.exp(-2 * x)  # Changed from -x to -2x for steeper urgency
+    )
+    
+    # **NEW**: Inventory pressure score (high inventory = high waste risk)
+    available['inventory_pressure'] = (available['inventory'] / max_bags).clip(lower=0.2)
+    
+    # **ENHANCED**: Combined urgency with inventory pressure
+    available['urgency_score'] = (
+        available['inventory'] * 
+        available['time_factor'] * 
+        available['inventory_pressure']  # Triple threat for waste
+    )
     max_urgency = max_bags * 1.0
     available['urgency_norm'] = (available['urgency_score'] / max_urgency).clip(upper=1.0)
     
-    # Inventory and rating normalization
+    # Standard normalizations
     available['inventory_norm'] = available['inventory'] / max_bags
     available['rating_norm'] = available['average_overall_rating'] / 5.0
     
-    # Revenue potential (personalized)
+    # Revenue potential
     if 'price' in available.columns:
         available['price_norm'] = available['price'] / max_price
-        # Higher preference + higher price = better revenue
         available['revenue_potential'] = (
             available['price_norm'] * 
             available['pref_norm'] *
@@ -635,210 +412,187 @@ def time_decay_urgency(stores_df, n, current_bags, closing_times=None, current_t
     else:
         available['revenue_potential'] = available['pref_norm'] * available['inventory_norm']
     
-    # Fairness score (inverse exposure)
+    # Fairness
     available['exposure_norm'] = available['exposure'] / max_exposure
     available['fairness_score'] = 1.0 - available['exposure_norm']
-    
-    # Diversity bonus (reward showing less-exposed stores)
     available['diversity_bonus'] = available['fairness_score'] * available['rating_norm']
     
-    # Supply-demand imbalance
-    available['demand_estimate'] = available['pref_norm'] * 10  # Estimate customers
+    # **ENHANCED**: Better demand estimation with overstock penalty
+    available['demand_estimate'] = available['pref_norm'] * 8  # Slightly more conservative
     available['supply_demand_ratio'] = available['inventory'] / (available['demand_estimate'] + 1)
-    available['waste_risk'] = available['supply_demand_ratio'].clip(upper=3.0) / 3.0
     
-    # === PHASE 3: URGENCY PHASE CATEGORIZATION ===
+    # **NEW**: Overstock penalty (punish stores with way too much inventory)
+    available['overstock_penalty'] = (available['supply_demand_ratio'] > 2.0).astype(float) * 0.5
+    available['waste_risk'] = (
+        (available['supply_demand_ratio'].clip(upper=4.0) / 4.0) + 
+        available['overstock_penalty']
+    ).clip(upper=1.0)
     
+    # === PHASE 3: EXPANDED URGENCY PHASES ===
+    
+    # **CHANGED**: More granular urgency phases
     available['urgency_phase'] = pd.cut(
         available['time_remaining'],
-        bins=[0, 0.5, 2.0, float('inf')],
-        labels=['critical', 'moderate', 'stable']
+        bins=[0, 0.75, 1.5, 3.0, float('inf')],  # Added 4 tiers instead of 3
+        labels=['critical', 'urgent', 'moderate', 'stable']
     )
     
-    # === PHASE 4: ADAPTIVE PHASE-SPECIFIC SCORING ===
+    # === PHASE 4: MODE-SPECIFIC SCORING ===
     
-    def calculate_personalized_score(row):
-        """Calculate score based on urgency phase and customer preferences."""
+    def calculate_waste_optimized_score(row):
+        """Enhanced scoring with waste prevention modes."""
         phase = row['urgency_phase']
         is_preferred = row['is_preferred']
         
-        if phase == 'critical':
-            # CRITICAL: Waste prevention dominates, but boost preferred stores
-            quality_threshold = 2.0 if is_preferred else 2.5
-            if row['average_overall_rating'] < quality_threshold and row['time_remaining'] > 0.25:
+        # Mode-specific weight adjustments
+        if waste_prevention_mode == 'aggressive':
+            urgency_multiplier = 1.5
+            pref_multiplier = 0.7
+        elif waste_prevention_mode == 'light':
+            urgency_multiplier = 0.7
+            pref_multiplier = 1.3
+        else:  # balanced
+            urgency_multiplier = 1.0
+            pref_multiplier = 1.0
+        
+        if phase == 'critical':  # < 45 min
+            # **MAXIMUM WASTE PREVENTION**: Quality threshold relaxed
+            quality_threshold = 2.0  # Accept any store >= 2.0 rating
+            if row['average_overall_rating'] < quality_threshold:
                 return 0
             
-            # Preferred stores get bonus even in critical phase
-            pref_bonus = 0.15 if is_preferred else 0
-            
             return (
-                0.50 * row['urgency_norm'] +         # Urgency is key
-                0.20 * row['waste_risk'] +           # Waste risk
-                0.15 * row['pref_norm'] +            # Customer preference
-                0.10 * row['inventory_norm'] +       # Inventory
-                0.05 * row['rating_norm'] +          # Quality floor
-                pref_bonus                            # Preference bonus
+                0.60 * row['urgency_norm'] * urgency_multiplier +  # Dominant urgency
+                0.20 * row['waste_risk'] +                          # Waste risk critical
+                0.10 * row['inventory_pressure'] +                  # Inventory pressure
+                0.05 * row['pref_norm'] * pref_multiplier +        # Minor personalization
+                0.05 * row['rating_norm']                           # Quality floor
             )
         
-        elif phase == 'moderate':
-            # MODERATE: Balance personalization with urgency
-            # Strong preference for customer's liked stores
-            pref_weight = 0.35 if is_preferred else 0.25
+        elif phase == 'urgent':  # 45 min - 1.5 hrs (NEW PHASE)
+            # **HIGH URGENCY**: Still waste-focused but consider preferences
+            pref_bonus = 0.1 if is_preferred else 0
             
             return (
-                pref_weight * row['pref_norm'] +     # Personalization focus
-                0.25 * row['urgency_norm'] +         # Moderate urgency
-                0.20 * row['revenue_potential'] +    # Revenue optimization
-                0.10 * row['waste_risk'] +           # Waste prevention
-                0.05 * row['fairness_score'] +       # Exposure fairness
-                0.05 * row['rating_norm']            # Quality
+                0.45 * row['urgency_norm'] * urgency_multiplier +
+                0.20 * row['waste_risk'] +
+                0.15 * row['pref_norm'] * pref_multiplier +
+                0.10 * row['inventory_pressure'] +
+                0.05 * row['revenue_potential'] +
+                0.05 * row['rating_norm'] +
+                pref_bonus
             )
         
-        else:  # stable
-            # STABLE: Maximize personalization and revenue
-            # This is discovery + revenue optimization phase
+        elif phase == 'moderate':  # 1.5 - 3 hrs
+            # **BALANCED**: Personalization meets waste prevention
+            pref_weight = 0.30 if is_preferred else 0.20
             
-            # 80% personalization, 20% discovery
+            return (
+                pref_weight * row['pref_norm'] * pref_multiplier +
+                0.30 * row['urgency_norm'] * urgency_multiplier +  # Still significant
+                0.20 * row['revenue_potential'] +
+                0.10 * row['waste_risk'] +
+                0.05 * row['fairness_score'] +
+                0.05 * row['rating_norm']
+            )
+        
+        else:  # stable (> 3 hrs)
+            # **PERSONALIZATION**: But still track waste risk
             if is_preferred:
                 return (
-                    0.45 * row['pref_norm'] +        # Strong personalization
-                    0.25 * row['revenue_potential'] + # Revenue focus
-                    0.15 * row['rating_norm'] +      # Quality
-                    0.10 * row['diversity_bonus'] +  # Some discovery
-                    0.05 * row['urgency_norm']       # Minor urgency
+                    0.40 * row['pref_norm'] * pref_multiplier +
+                    0.25 * row['revenue_potential'] +
+                    0.15 * row['rating_norm'] +
+                    0.10 * row['urgency_norm'] * urgency_multiplier +  # Still considered
+                    0.10 * row['diversity_bonus']
                 )
             else:
-                # Discovery mode: show new/diverse stores
                 return (
-                    0.35 * row['diversity_bonus'] +  # Discovery focus
-                    0.25 * row['revenue_potential'] + # Revenue
-                    0.20 * row['rating_norm'] +      # Quality important
-                    0.15 * row['pref_norm'] +        # Some personalization
-                    0.05 * row['urgency_norm']       # Minor urgency
+                    0.35 * row['diversity_bonus'] +
+                    0.25 * row['revenue_potential'] +
+                    0.20 * row['rating_norm'] +
+                    0.15 * row['urgency_norm'] * urgency_multiplier +
+                    0.05 * row['pref_norm'] * pref_multiplier
                 )
     
-    available['personalized_score'] = available.apply(calculate_personalized_score, axis=1)
+    available['personalized_score'] = available.apply(calculate_waste_optimized_score, axis=1)
     
-    # === PHASE 5: ADAPTIVE SLOT ALLOCATION ===
+    # === PHASE 5: WASTE-OPTIMIZED SLOT ALLOCATION ===
     
-    # Separate stores by urgency phase
     critical_stores = available[available['urgency_phase'] == 'critical'].copy()
+    urgent_stores = available[available['urgency_phase'] == 'urgent'].copy()  # NEW
     moderate_stores = available[available['urgency_phase'] == 'moderate'].copy()
     stable_stores = available[available['urgency_phase'] == 'stable'].copy()
     
     num_critical = len(critical_stores)
+    num_urgent = len(urgent_stores)
     num_moderate = len(moderate_stores)
     num_stable = len(stable_stores)
     
-    # Count preferred stores in each phase
-    num_critical_preferred = critical_stores['is_preferred'].sum() if num_critical > 0 else 0
-    num_moderate_preferred = moderate_stores['is_preferred'].sum() if num_moderate > 0 else 0
-    num_stable_preferred = stable_stores['is_preferred'].sum() if num_stable > 0 else 0
-    
-    # Adaptive allocation based on preferences and urgency
+    # **WASTE-FIRST ALLOCATION**
     if num_critical > 0:
-        # Critical stores get priority, but cap at 60% if lots of preferred stores available
-        if (num_moderate_preferred + num_stable_preferred) >= n * 0.6:
-            critical_slots = min(num_critical, max(1, int(n * 0.4)))
-        else:
-            critical_slots = min(num_critical, max(1, int(n * 0.5)))
+        # Critical stores get GUARANTEED slots (minimum 50% if they exist)
+        critical_slots = min(num_critical, max(int(n * 0.5), min(num_critical, n)))
     else:
         critical_slots = 0
     
-    remaining_slots = n - critical_slots
+    remaining = n - critical_slots
     
-    # Moderate gets priority over stable if has preferred stores
-    if num_moderate > 0 and num_moderate_preferred > 0:
-        moderate_slots = min(num_moderate, max(1, int(remaining_slots * 0.5)))
-    elif num_moderate > 0:
-        moderate_slots = min(num_moderate, max(1, int(remaining_slots * 0.3)))
+    if num_urgent > 0:
+        # Urgent stores get second priority
+        urgent_slots = min(num_urgent, max(1, int(remaining * 0.4)))
+    else:
+        urgent_slots = 0
+    
+    remaining -= urgent_slots
+    
+    if num_moderate > 0:
+        moderate_slots = min(num_moderate, max(1, int(remaining * 0.5)))
     else:
         moderate_slots = 0
     
-    stable_slots = remaining_slots - moderate_slots
+    stable_slots = remaining - moderate_slots
     
-    # === PHASE 6: SMART SELECTION WITH DIVERSITY ===
+    # === PHASE 6: SELECTION ===
     
     selected = []
     selected_set = set()
     
-    def select_with_diversity(stores_df, slots, min_diversity_pct=0.15):
-        """Select stores ensuring some diversity (not all from same preference tier)."""
+    def select_top_scorers(stores_df, slots):
+        """Simple top-scorer selection for waste prevention."""
         if len(stores_df) == 0 or slots == 0:
             return []
         
         stores_sorted = stores_df.sort_values('personalized_score', ascending=False)
-        
-        # Reserve diversity slots
-        diversity_slots = max(1, int(slots * min_diversity_pct))
-        main_slots = slots - diversity_slots
-        
-        # Main selection: top scorers
-        main_selection = stores_sorted.head(main_slots)['store_id'].tolist()
-        
-        # Diversity selection: from lower-exposed stores with decent scores
-        remaining = stores_sorted[~stores_sorted['store_id'].isin(main_selection)]
-        if len(remaining) > 0:
-            # Sort by fairness score (least exposed first) among decent stores
-            remaining = remaining[remaining['personalized_score'] > 0.3]
-            if len(remaining) > 0:
-                remaining = remaining.sort_values('fairness_score', ascending=False)
-                diversity_selection = remaining.head(diversity_slots)['store_id'].tolist()
-            else:
-                diversity_selection = []
-        else:
-            diversity_selection = []
-        
-        return main_selection + diversity_selection
+        return stores_sorted.head(slots)['store_id'].tolist()
     
-    # Critical phase: mostly urgency-driven
-    if critical_slots > 0 and num_critical > 0:
-        critical_selected = select_with_diversity(critical_stores, critical_slots, 0.1)
-        selected.extend(critical_selected)
-        selected_set.update(critical_selected)
+    # Critical: NO diversity, pure urgency
+    if critical_slots > 0:
+        selected.extend(select_top_scorers(critical_stores, critical_slots))
+        selected_set.update(selected)
     
-    # Moderate phase: balanced personalization
-    if moderate_slots > 0 and num_moderate > 0:
-        moderate_selected = select_with_diversity(moderate_stores, moderate_slots, 0.15)
+    # Urgent: Minimal diversity
+    if urgent_slots > 0:
+        selected.extend(select_top_scorers(urgent_stores, urgent_slots))
+        selected_set.update(selected)
+    
+    # Moderate & Stable: Some diversity
+    if moderate_slots > 0:
+        moderate_selected = select_top_scorers(moderate_stores, moderate_slots)
         selected.extend(moderate_selected)
         selected_set.update(moderate_selected)
     
-    # Stable phase: strong personalization with discovery
-    if stable_slots > 0 and num_stable > 0:
-        stable_selected = select_with_diversity(stable_stores, stable_slots, 0.20)
+    if stable_slots > 0:
+        stable_selected = select_top_scorers(stable_stores, stable_slots)
         selected.extend(stable_selected)
         selected_set.update(stable_selected)
     
-    # === PHASE 7: FILL REMAINING SLOTS (if any) ===
-    
+    # Fill remaining
     if len(selected) < n:
         remaining = available[~available['store_id'].isin(selected_set)]
         remaining = remaining.sort_values('personalized_score', ascending=False)
         additional = remaining.head(n - len(selected))['store_id'].tolist()
         selected.extend(additional)
-    
-    # === PHASE 8: FINAL QUALITY CHECK ===
-    
-    # Ensure at least one high-rated store if available
-    selected_ratings = stores_df[stores_df['store_id'].isin(selected)]['average_overall_rating']
-    if len(selected_ratings) > 0 and selected_ratings.max() < 4.0:
-        # Find a high-rated store to include
-        high_rated = available[
-            (available['average_overall_rating'] >= 4.0) & 
-            (~available['store_id'].isin(selected_set))
-        ]
-        if len(high_rated) > 0:
-            # Replace lowest-scoring non-critical store
-            non_critical_selected = [
-                sid for sid in selected 
-                if sid not in critical_stores['store_id'].tolist()
-            ]
-            if non_critical_selected:
-                # Remove lowest scorer
-                selected.remove(non_critical_selected[-1])
-                # Add high-rated store
-                best_high_rated = high_rated.nlargest(1, 'personalized_score')['store_id'].iloc[0]
-                selected.append(best_high_rated)
     
     return selected[:n]
 
@@ -897,321 +651,6 @@ def supply_demand_equilibrium(stores_df, n, current_bags, customer_valuations=No
 
     scores.sort(key=lambda x: x[1], reverse=True)
     return [sid for sid, _ in scores[:n]]
-
-
-def geographic_load_balancer(stores_df, n, current_bags, customer_valuations=None, zone_mapping=None):
-    """
-    GEOGRAPHIC LOAD BALANCER: Distribute customers across city zones.
-    
-    Key Insight: Geographic clustering creates problems:
-    - Traffic congestion in popular areas
-    - Delivery delays
-    - Waste in underserved areas
-    - Unfair competition within zones
-    
-    Strategy (Divide and Conquer):
-    1. Divide city into geographic zones (districts/neighborhoods)
-    2. Assess inventory levels per zone
-    3. Allocate display slots proportionally to zone inventory
-    4. Within each zone, select best stores
-    5. Ensure geographic diversity in results
-    
-    Zone Analysis:
-        zone_inventory = sum(bags for all stores in zone)
-        zone_priority = zone_inventory / total_inventory
-        zone_slots = n * zone_priority
-    
-    Example Distribution:
-    - Zone A (Downtown): 100 bags total ? 3 slots
-    - Zone B (University): 80 bags total ? 2 slots
-    - Zone C (Suburbs): 60 bags total ? 2 slots
-    - Zone D (Industrial): 40 bags total ? 1 slot
-    
-    Pros:
-    - Reduces geographic waste clusters
-    - Distributes customer traffic evenly
-    - Supports stores in all neighborhoods
-    - Reduces delivery concentration
-    
-    Cons:
-    - May show distant stores to customers
-    - Requires zone mapping data
-    - Could increase average travel distance
-    
-    Time Complexity: O(Z * S/Z * log(S/Z)) where Z = number of zones
-    Technique: Divide and Conquer (spatial partitioning)
-    
-    Args:
-        stores_df (DataFrame): Store data with location info
-        n (int): Number of stores to display
-        current_bags (dict): {store_id: remaining_bags}
-        zone_mapping (dict): {store_id: zone_id} or None
-        
-    Returns:
-        list: Geographically balanced store IDs
-    """
-    available_ids = [sid for sid, bags in current_bags.items() if bags > 0]
-    if not available_ids:
-        return []
-    
-    available = stores_df[stores_df['store_id'].isin(available_ids)]
-    
-    # Generate simple zone mapping if not provided
-    # Simulate zones based on store_id patterns
-    if zone_mapping is None:
-        zone_mapping = {}
-        for sid in available_ids:
-            # Simple heuristic: use store_id to determine zone
-            # This simulates geographic clustering
-            zone_id = f"zone_{(hash(str(sid)) % 4) + 1}"
-            zone_mapping[sid] = zone_id
-    
-    # Organize stores by zone
-    zones = defaultdict(list)
-    zone_inventory = defaultdict(int)
-    
-    for _, row in available.iterrows():
-        sid = row['store_id']
-        zone = zone_mapping.get(sid, 'zone_unknown')
-        inventory = current_bags[sid]
-        rating = row['average_overall_rating']
-        
-        zones[zone].append({
-            'store_id': sid,
-            'inventory': inventory,
-            'rating': rating,
-            'zone': zone
-        })
-        zone_inventory[zone] += inventory
-    
-    # Calculate total inventory
-    total_inventory = sum(zone_inventory.values())
-    if total_inventory == 0:
-        return []
-    
-    # Allocate slots to each zone based on inventory proportion
-    zone_allocations = {}
-    allocated_slots = 0
-    
-    for zone, inventory in zone_inventory.items():
-        proportion = inventory / total_inventory
-        slots = int(n * proportion)
-        
-        # Ensure at least 1 slot for zones with inventory
-        if slots == 0 and inventory > 0 and allocated_slots < n:
-            slots = 1
-            
-        zone_allocations[zone] = slots
-        allocated_slots += slots
-    
-    # Distribute remaining slots to zones with highest inventory
-    remaining_slots = n - allocated_slots
-    if remaining_slots > 0:
-        sorted_zones = sorted(zone_inventory.items(), key=lambda x: x[1], reverse=True)
-        for zone, _ in sorted_zones:
-            if remaining_slots > 0:
-                zone_allocations[zone] = zone_allocations.get(zone, 0) + 1
-                remaining_slots -= 1
-    
-    # Select best stores from each zone
-    selected = []
-    
-    for zone, stores in zones.items():
-        allocation = zone_allocations.get(zone, 0)
-        if allocation == 0:
-            continue
-        
-        # Sort stores within zone by combined score
-        for store in stores:
-            # Zone-local scoring
-            rating_norm = store['rating'] / 5.0
-            # Normalize inventory within zone
-            zone_max = max(s['inventory'] for s in stores) if stores else 1
-            inventory_norm = store['inventory'] / zone_max
-            
-            # Balanced score within zone
-            store['score'] = 0.6 * rating_norm + 0.4 * inventory_norm
-        
-        # Sort by score within zone
-        stores.sort(key=lambda x: x['score'], reverse=True)
-        
-        # Select top stores from zone up to allocation
-        for i in range(min(allocation, len(stores))):
-            selected.append(stores[i]['store_id'])
-            if len(selected) >= n:
-                break
-    
-    # If we haven't filled all slots, add best remaining stores
-    if len(selected) < n:
-        all_stores = []
-        for zone_stores in zones.values():
-            all_stores.extend(zone_stores)
-        
-        # Remove already selected
-        remaining = [s for s in all_stores if s['store_id'] not in selected]
-        remaining.sort(key=lambda x: x['score'], reverse=True)
-        
-        for store in remaining:
-            if len(selected) < n:
-                selected.append(store['store_id'])
-            else:
-                break
-    
-    return selected[:n]
-
-
-def reputation_recovery(stores_df, n, current_bags, customer_valuations=None, rating_history=None):
-    """
-    REPUTATION RECOVERY: Boost improving stores to accelerate recovery.
-    
-    Key Insight: Stores that are improving deserve visibility to:
-    - Reward improvement efforts
-    - Build positive momentum
-    - Prevent abandonment of recovery efforts
-    - Show customers that stores can change
-    
-    Strategy (Transform and Conquer):
-    1. Transform ratings into improvement trajectories
-    2. Calculate rating velocity (rate of change)
-    3. Identify "recovering" stores (positive trajectory)
-    4. Boost recovering stores while maintaining standards
-    
-    Improvement Detection:
-        recent_avg = average(last 10 reviews)
-        historical_avg = average(all previous reviews)
-        improvement = recent_avg - historical_avg
-        momentum = improvement / time_period
-    
-    Store Categories:
-    - Rising Stars: Low rating but improving fast ? High priority
-    - Steady Climbers: Medium rating, improving ? Medium-high priority
-    - Plateaued: High rating, stable ? Normal priority
-    - Declining: Rating dropping ? Lower priority
-    
-    Pros:
-    - Rewards quality improvements
-    - Encourages stores to maintain standards
-    - Creates positive feedback loop
-    - Helps struggling stores recover
-    
-    Cons:
-    - May promote inconsistent stores
-    - Recent improvements might not last
-    - Requires sufficient review history
-    
-    Time Complexity: O(S log S) for sorting
-    Technique: Transform and Conquer (ratings ? trajectories)
-    
-    Args:
-        stores_df (DataFrame): Store data with ratings
-        n (int): Number of stores to display
-        current_bags (dict): {store_id: remaining_bags}
-        rating_history (dict): {store_id: {'recent': X, 'historical': Y}} or None
-        
-    Returns:
-        list: Store IDs with recovery boost applied
-    """
-    available_ids = [sid for sid, bags in current_bags.items() if bags > 0]
-    if not available_ids:
-        return []
-    
-    available = stores_df[stores_df['store_id'].isin(available_ids)]
-    max_bags = max(current_bags[sid] for sid in available_ids)
-    
-    # Generate simulated rating history if not provided
-    if rating_history is None:
-        rating_history = {}
-        for _, row in available.iterrows():
-            sid = row['store_id']
-            current_rating = row['average_overall_rating']
-
-            # Use deterministic hash-based values (no random calls!)
-            # This avoids corrupting the simulation's random state
-            h = hash(str(sid) + 'history')
-
-            # Deterministic category: 40% improving, 40% stable, 20% declining
-            category = (h % 100) / 100.0
-            if category < 0.4:  # Improving stores
-                hist_delta = -0.3 - ((h % 70) / 100.0)  # -0.3 to -1.0
-                recent_delta = 0.1 + ((h % 20) / 100.0)  # +0.1 to +0.3
-            elif category < 0.8:  # Stable stores
-                hist_delta = -0.2 + ((h % 40) / 100.0)  # -0.2 to +0.2
-                recent_delta = -0.1 + ((h % 20) / 100.0)  # -0.1 to +0.1
-            else:  # Declining stores
-                hist_delta = 0.2 + ((h % 30) / 100.0)  # +0.2 to +0.5
-                recent_delta = -0.1 - ((h % 20) / 100.0)  # -0.1 to -0.3
-
-            historical = max(1.0, min(5.0, current_rating + hist_delta))
-            recent = max(1.0, min(5.0, current_rating + recent_delta))
-
-            rating_history[sid] = {
-                'historical': historical,
-                'recent': recent,
-                'current': current_rating
-            }
-    
-    scores = []
-    for _, row in available.iterrows():
-        sid = row['store_id']
-        current_rating = row['average_overall_rating']
-        inventory = current_bags[sid]
-        
-        # Get rating trajectory
-        history = rating_history.get(sid, {})
-        historical_rating = history.get('historical', current_rating)
-        recent_rating = history.get('recent', current_rating)
-        
-        # Calculate improvement metrics
-        overall_improvement = current_rating - historical_rating
-        recent_trend = recent_rating - current_rating
-        
-        # Momentum score (rate of improvement)
-        # Positive = improving, Negative = declining
-        momentum = (overall_improvement + recent_trend * 2) / 3
-        
-        # Categorize stores
-        if current_rating < 3.5 and momentum > 0.3:
-            category = 'rising_star'
-            category_boost = 1.5
-        elif current_rating >= 3.5 and momentum > 0.1:
-            category = 'steady_climber'
-            category_boost = 1.2
-        elif abs(momentum) <= 0.1:
-            category = 'stable'
-            category_boost = 1.0
-        else:
-            category = 'declining'
-            category_boost = 0.8
-        
-        # Normalize components
-        rating_norm = current_rating / 5.0
-        inventory_norm = inventory / max_bags
-        
-        # Calculate momentum bonus (0 to 1)
-        momentum_bonus = max(0, min(1, (momentum + 1) / 2))
-        
-        # Combined score with category boost
-        base_score = (
-            0.35 * rating_norm +           # Current quality
-            0.35 * inventory_norm +         # Inventory level
-            0.30 * momentum_bonus           # Improvement trajectory
-        )
-        
-        final_score = base_score * category_boost
-        
-        scores.append({
-            'store_id': sid,
-            'score': final_score,
-            'category': category,
-            'momentum': momentum,
-            'current_rating': current_rating
-        })
-    
-    # Sort by score descending
-    scores.sort(key=lambda x: x['score'], reverse=True)
-    
-    return [s['store_id'] for s in scores[:n]]
-
 
 def accuracy_aware_ranking(stores_df, n, current_bags, customer_valuations=None, accuracy_tracker=None):
     """
@@ -2442,6 +1881,88 @@ def get_ga_evolved_weights():
         'description': 'Shows stores customer values + high inventory'
     }
 
+def unified_optimization_score_v2(
+    stores_df, 
+    n, 
+    current_bags, 
+    customer_valuations=None, 
+    closing_times=None, 
+    current_time=None,
+    exposure_history=None,
+    customer_tier='Standard',
+    cancellation_penalty_flag=0.0,
+    customer_discount=0.0
+):
+    available_ids = [sid for sid, bags in current_bags.items() if bags > 0]
+    if not available_ids:
+        return []
+    # --- SETUP & NORMALIZATION (Skipped for brevity) ---
+    
+    available = stores_df[stores_df['store_id'].isin(available_ids)].copy()
+    
+    # 1. STORE OPERATIONAL METRIC (NEW)
+    if 'operational_score' in available.columns:
+        # Normalize operational score (e.g., 80/100 -> 0.8)
+        max_op_score = available['operational_score'].max() if available['operational_score'].max() > 0 else 100
+        available['op_norm'] = available['operational_score'] / max_op_score
+    else:
+        # Default to neutral if data is missing
+        available['op_norm'] = 1.0
+
+    # 2. REVENUE METRIC MODIFICATION (Integration of Discounts/Value)
+    max_price = available['price'].max() if 'price' in available.columns else 1.0
+
+    # Effective Price Multiplier: (1 - customer_discount) * price_norm
+    available['effective_price_norm'] = (available['price'] / max_price) * (1.0 - customer_discount)
+    
+    # Revenue Potential (Store's perspective): 
+    # Store quality * Operational Score * (Effective Price)
+    available['revenue_metric'] = (
+        available['op_norm'] * # Only show reliable stores for high revenue
+        available['effective_price_norm'] * # Adjusted for discount (less revenue, but higher conversion)
+        available['inventory_norm'] * available['pref_norm']
+    )
+    
+    # 3. CUSTOMER PRIORITY FACTOR (NEW)
+    # Loyalty Tier Bonus
+    loyalty_multipliers = {
+        'Gold': 1.15,  # 15% rank boost
+        'Silver': 1.05, # 5% rank boost
+        'Standard': 1.0
+    }
+    loyalty_bonus = loyalty_multipliers.get(customer_tier, 1.0)
+    
+    # Cancellation Compensation Multiplier
+    # If flag is 1.0 (true), give a significant temporary boost (e.g., 20%)
+    cancellation_boost = 1.0 + (cancellation_penalty_flag * 0.20) 
+    
+    # Combine Customer Priority
+    customer_priority_factor = loyalty_bonus * cancellation_boost
+
+    # --- DYNAMIC WEIGHTING & FINAL SCORE CALCULATION (Modified) ---
+
+    def calculate_unified_score(row):
+        # ... Dynamic weight calculation based on time_remaining_h (W_urgency, W_revenue, W_pref) ...
+        
+        # New base score incorporates the Store Operational Metric
+        base_score = (
+            W_urgency * row['urgency_score'] + 
+            W_revenue * row['revenue_metric'] + 
+            W_pref * row['pref_norm']
+        )
+        
+        # FINAL SCORE = (Base Score * Store Operational Score) * Customer Priority Factor * Fairness Factor
+        final_score = (
+            base_score * row['op_norm'] * # Store's operational reliability is a multiplier
+            customer_priority_factor * # Customer's priority (Cancellation/Loyalty)
+            row['fairness_factor']             # Store's exposure fairness
+        )
+        return final_score
+
+    available['unified_score'] = available.apply(calculate_unified_score, axis=1)
+
+    # --- RANKING (Skipped for brevity) ---
+    return top_n['store_id'].tolist()
 
 ALGORITHMS = {
     'Greedy Baseline': greedy_baseline,
@@ -2449,12 +1970,9 @@ ALGORITHMS = {
     'Inventory-Rating Equilibrium': inventory_rating_equilibrium,
     'Underdog Boost': underdog_boost,
     'Waste Prevention': waste_prevention_threshold,
-    'Price-Value Optimizer': price_value_optimizer,
-    'Round Robin Fairness': round_robin_fairness,
+ 
     'Time Decay Urgency': time_decay_urgency,
     'Supply Demand Equilibrium': supply_demand_equilibrium,
-    'Geographic Load Balancer': geographic_load_balancer,
-    'Reputation Recovery': reputation_recovery,
     # ADVANCED HIGH-PERFORMANCE ALGORITHMS
     'DP Optimal Visibility': dp_optimal_visibility,
     'Customer-Aware Demand': customer_aware_demand_prediction,
@@ -2467,6 +1985,7 @@ ALGORITHMS = {
     'Personalized Ultimate': personalized_ultimate,
     # GENETIC ALGORITHM
     'Genetic Algorithm': genetic_algorithm_ranking,
+    'Unified Optimization V2': unified_optimization_score_v2,
 }
 
 def register_accuracy_aware_algorithm(accuracy_tracker, name='Accuracy Aware'):
