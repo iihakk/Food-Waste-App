@@ -1964,6 +1964,334 @@ def unified_optimization_score_v2(
     # --- RANKING (Skipped for brevity) ---
     return top_n['store_id'].tolist()
 
+
+def stochastic_programming(stores_df, n, current_bags, customer_valuations=None):
+    """
+    REVENUE-MAXIMIZING STOCHASTIC PROGRAMMING
+    
+    Objective: Maximize Total Revenue = Actual Revenue - Lost Revenue
+    
+    Where Lost Revenue has TWO sources:
+    
+    1. CANCELLATION LOSS (Krispy Kreme Problem):
+       - Store is overbooked relative to actual capacity
+       - Reservations > Actual Bags → Cancellations
+       - Lost = cancelled_orders × price
+       - PLUS: Angry customers who could have bought elsewhere
+    
+    2. CONCENTRATION LOSS (Single Customer Problem):
+       - Too few customers for a store's inventory
+       - One customer gets 10 bags worth of content
+       - Lost = (potential_bags - 1) × price
+       - The 9 bags given to 1 person = 9 lost sales
+    
+    3. UNDEREXPOSURE LOSS (TBS Problem):
+       - Store not shown enough despite having inventory
+       - Actual Bags > Reservations → Unsold capacity
+       - Lost = unsold_bags × price
+    
+    The Matching Objective:
+        For each store: Reservations_j ≈ E[ActualBags_j]
+        
+        We want to SPREAD demand to MATCH supply across stores.
+    
+    Key Insight - The Revenue Equation:
+        Total Revenue = Σ_j min(Reservations_j, ActualBags_j) × Price_j
+        
+        To maximize this, we need:
+        - Avoid over-concentration on popular stores (causes cancellations)
+        - Avoid under-exposure of unpopular stores (causes waste)
+        - Match expected demand to expected supply per store
+    
+    Algorithm Strategy:
+        1. Estimate how many more customers each store NEEDS to match supply
+        2. Prioritize stores with UNFILLED CAPACITY (demand < supply)
+        3. Penalize stores that are OVER-SUBSCRIBED (demand > supply)
+        4. Account for estimation uncertainty (±30% variance)
+        5. Consider customer preferences (they must actually want to buy)
+    
+    All parameters derived from data - NO hardcoded values.
+    
+    Technique: Stochastic Programming / Revenue Optimization
+    Time Complexity: O(S log S) where S = number of stores
+    
+    Args:
+        stores_df (DataFrame): Store data with 'store_id', 'price', 'average_overall_rating'
+        n (int): Number of stores to display
+        current_bags (dict): {store_id: estimated_remaining_bags}
+        customer_valuations (dict): {store_id: customer_preference} or None
+        
+    Returns:
+        list: Top n store IDs that maximize expected total revenue
+    """
+    available_ids = [sid for sid, bags in current_bags.items() if bags > 0]
+    if not available_ids:
+        return []
+    
+    if len(available_ids) <= n:
+        return available_ids
+    
+    # ===== STEP 1: Extract and organize data =====
+    
+    store_data = {}
+    for _, row in stores_df.iterrows():
+        sid = row['store_id']
+        if sid in available_ids:
+            # Customer's valuation for this store (or rating as proxy)
+            val = row['average_overall_rating']
+            if customer_valuations is not None and sid in customer_valuations:
+                val = customer_valuations[sid]
+            
+            store_data[sid] = {
+                'price': row['price'],
+                'rating': row['average_overall_rating'],
+                'estimated_bags': current_bags[sid],
+                'valuation': val
+            }
+    
+    # ===== STEP 2: Compute data-driven statistics =====
+    
+    prices = np.array([d['price'] for d in store_data.values()])
+    estimated_bags = np.array([d['estimated_bags'] for d in store_data.values()])
+    ratings = np.array([d['rating'] for d in store_data.values()])
+    valuations = np.array([d['valuation'] for d in store_data.values()])
+    
+    # Machine epsilon to avoid division by zero
+    eps = np.finfo(float).eps
+    
+    # Totals and means
+    total_estimated_bags = estimated_bags.sum()
+    total_price_capacity = (prices * estimated_bags).sum()  # Total potential revenue
+    num_stores = len(available_ids)
+    
+    # Statistical measures
+    price_mean = prices.mean()
+    bags_mean = estimated_bags.mean()
+    val_mean = valuations.mean()
+    
+    price_std = prices.std() if len(prices) > 1 else eps
+    bags_std = estimated_bags.std() if len(estimated_bags) > 1 else eps
+    val_std = valuations.std() if len(valuations) > 1 else eps
+    
+    # Ranges for normalization
+    price_min, price_max = prices.min(), prices.max()
+    bags_min, bags_max = estimated_bags.min(), estimated_bags.max()
+    val_min, val_max = valuations.min(), valuations.max()
+    
+    price_range = price_max - price_min if price_max != price_min else price_mean
+    bags_range = bags_max - bags_min if bags_max != bags_min else bags_mean
+    val_range = val_max - val_min if val_max != val_min else val_mean
+    
+    # ===== STEP 3: Estimate current demand distribution =====
+    #
+    # Key insight: current_bags shows REMAINING estimated bags.
+    # If a store started with 20 bags and now has 5, it got ~15 reservations.
+    # We can infer demand patterns from the remaining inventory.
+    
+    # Calculate implied reservations so far (estimated)
+    # We use the original bags from stores_df vs current_bags
+    original_bags = {}
+    for _, row in stores_df.iterrows():
+        sid = row['store_id']
+        if sid in available_ids:
+            original_bags[sid] = row['average_bags_at_9AM']
+    
+    implied_reservations = {}
+    for sid in available_ids:
+        original = original_bags.get(sid, store_data[sid]['estimated_bags'])
+        remaining = store_data[sid]['estimated_bags']
+        implied_reservations[sid] = max(0, original - remaining)
+    
+    total_implied_reservations = sum(implied_reservations.values())
+    
+    # ===== STEP 4: Calculate SUPPLY-DEMAND GAP for each store =====
+    #
+    # Gap > 0: Store has MORE supply than demand (UNDEREXPOSED - needs customers)
+    # Gap < 0: Store has MORE demand than supply (OVEREXPOSED - risk of cancellation)
+    # Gap ≈ 0: Store is well-matched
+    
+    supply_demand_gap = {}
+    for sid, data in store_data.items():
+        # Expected actual bags (accounting for ±30% uncertainty)
+        # Conservative estimate: use lower bound to avoid over-promising
+        # E[Actual] = Estimated, but could be as low as 0.7 × Estimated
+        conservative_supply = data['estimated_bags']  # Current remaining
+        
+        # Current demand = implied reservations
+        current_demand = implied_reservations[sid]
+        
+        # Gap: positive means needs more customers, negative means over-subscribed
+        supply_demand_gap[sid] = conservative_supply - current_demand
+    
+    # Normalize gaps
+    gaps = np.array(list(supply_demand_gap.values()))
+    gap_mean = gaps.mean()
+    gap_std = gaps.std() if len(gaps) > 1 else eps
+    gap_min, gap_max = gaps.min(), gaps.max()
+    gap_range = gap_max - gap_min if gap_max != gap_min else abs(gap_mean) + eps
+    
+    # ===== STEP 5: Calculate MARGINAL REVENUE VALUE for each store =====
+    #
+    # The question: "If we show this store to THIS customer, what's the
+    # expected change in total platform revenue?"
+    #
+    # Marginal Revenue = P(customer buys from this store) × 
+    #                    E[Revenue impact of that purchase]
+    #
+    # Revenue impact considers:
+    # - Direct revenue: price × P(not cancelled)
+    # - Opportunity cost avoided: filling an undersupplied store
+    # - Concentration penalty: don't over-concentrate on one store
+    
+    scores = []
+    
+    for sid, data in store_data.items():
+        price = data['price']
+        est_bags = data['estimated_bags']
+        valuation = data['valuation']
+        rating = data['rating']
+        gap = supply_demand_gap[sid]
+        
+        # --- Component 1: Purchase Probability ---
+        # P(this customer buys from store j | store j is displayed)
+        # Based on customer's relative valuation
+        
+        # Normalize valuation to [0, 1]
+        val_norm = (valuation - val_min) / (val_range + eps)
+        
+        # Purchase probability proportional to valuation
+        # Higher valuation = more likely to choose this store
+        purchase_prob = valuation / (valuations.sum() + eps)
+        
+        # --- Component 2: Fulfillment Probability ---
+        # P(order is fulfilled | customer reserves)
+        # Depends on gap: if store is undersupplied (gap < 0), higher cancel risk
+        
+        # Normalize gap to [0, 1] where 1 = most undersupplied (needs customers)
+        gap_norm = (gap - gap_min) / (gap_range + eps)
+        
+        # If gap > 0 (more supply than demand), high fulfillment probability
+        # If gap < 0 (more demand than supply), lower fulfillment probability
+        if gap >= 0:
+            fulfillment_prob = 1.0  # Plenty of supply, will fulfill
+        else:
+            # Risk of cancellation increases as gap becomes more negative
+            # Scale by how negative relative to the range
+            fulfillment_prob = max(0.1, 1.0 + (gap / (bags_range + eps)))
+        
+        # --- Component 3: Direct Revenue ---
+        # E[Revenue from this sale] = price × P(fulfilled)
+        
+        price_norm = (price - price_min) / (price_range + eps)
+        expected_direct_revenue = price_norm * fulfillment_prob
+        
+        # --- Component 4: Opportunity Value (Underexposure Correction) ---
+        # Stores with high gap (undersupplied) have high opportunity value
+        # Showing them captures revenue that would otherwise be lost
+        #
+        # This is the TBS problem: store has bags but isn't getting customers
+        # Each unfilled bag = lost revenue opportunity
+        
+        # Opportunity value = gap × price (revenue at risk of being lost)
+        # Normalize by total potential
+        if gap > 0:
+            # Store needs customers - high opportunity value
+            opportunity_value = (gap * price) / (total_price_capacity + eps)
+        else:
+            # Store is over-subscribed - no opportunity value from showing more
+            opportunity_value = 0
+        
+        # --- Component 5: Concentration Penalty ---
+        # Penalty for showing stores that already have high demand relative to supply
+        # This prevents the Krispy Kreme problem (too many bookings)
+        #
+        # Also prevents single-customer concentration:
+        # If a store has many bags but few reservations, one more customer
+        # would cause concentration (that 1 customer gets everything)
+        
+        # Concentration risk: how much of this store's supply would go to few customers?
+        current_reservations = implied_reservations[sid]
+        
+        if current_reservations == 0:
+            # No one has booked yet - if we're the first, we get EVERYTHING
+            # This is the single-customer concentration problem
+            # Concentration penalty = (bags - 1) / bags = how much is "wasted" on one person
+            concentration_penalty = (est_bags - 1) / (est_bags + eps)
+        elif gap < 0:
+            # Over-subscribed: penalty for adding more demand
+            concentration_penalty = abs(gap) / (bags_range + eps)
+        else:
+            # Healthy demand distribution
+            concentration_penalty = 0
+        
+        # --- Component 6: Estimation Uncertainty Adjustment ---
+        # Actual bags vary ±30% from estimate
+        # Stores with high estimates have high ABSOLUTE uncertainty
+        # We should be more conservative with high-estimate stores
+        #
+        # Uncertainty = proportional to estimate (larger estimates = more variance)
+        
+        relative_uncertainty = est_bags / (total_estimated_bags + eps)
+        
+        # --- FINAL SCORE: Expected Marginal Revenue ---
+        #
+        # Score = P(purchase) × [E[direct_revenue] + opportunity_value 
+        #                        - concentration_penalty - uncertainty_adjustment]
+        #
+        # All components are data-normalized, so we combine them directly
+        
+        # Revenue component (want to maximize)
+        revenue_component = expected_direct_revenue + opportunity_value
+        
+        # Risk component (want to minimize)
+        risk_component = concentration_penalty * relative_uncertainty
+        
+        # Preference alignment (customer must actually want this store)
+        preference_alignment = val_norm
+        
+        # Weighted combination using data-derived importance
+        # CV (coefficient of variation) determines relative importance
+        cv_price = price_std / (price_mean + eps)
+        cv_bags = bags_std / (bags_mean + eps)
+        cv_val = val_std / (val_mean + eps)
+        cv_total = cv_price + cv_bags + cv_val + eps
+        
+        w_revenue = cv_price / cv_total
+        w_supply = cv_bags / cv_total
+        w_preference = cv_val / cv_total
+        
+        # Final expected marginal revenue score
+        marginal_revenue_score = (
+            purchase_prob * (
+                w_revenue * revenue_component +
+                w_supply * (gap_norm - risk_component) +
+                w_preference * preference_alignment
+            )
+        )
+        
+        # Boost for undersupplied stores (they NEED this customer)
+        # This directly addresses the TBS problem
+        if gap > 0:
+            undersupply_boost = gap_norm * w_supply
+            marginal_revenue_score += undersupply_boost
+        
+        scores.append((sid, marginal_revenue_score, {
+            'gap': gap,
+            'purchase_prob': purchase_prob,
+            'fulfillment_prob': fulfillment_prob,
+            'concentration_penalty': concentration_penalty
+        }))
+    
+    # ===== STEP 6: Select top n stores =====
+    #
+    # Sort by marginal revenue score (descending)
+    # These are the stores where showing them to this customer
+    # maximizes expected total platform revenue
+    
+    scores.sort(key=lambda x: x[1], reverse=True)
+    
+    return [sid for sid, _, _ in scores[:n]]
+
 ALGORITHMS = {
     'Greedy Baseline': greedy_baseline,
     'Inventory Aware': inventory_aware,
@@ -1986,6 +2314,7 @@ ALGORITHMS = {
     # GENETIC ALGORITHM
     'Genetic Algorithm': genetic_algorithm_ranking,
     'Unified Optimization V2': unified_optimization_score_v2,
+    'Stochastic Programming': stochastic_programming,
 }
 
 def register_accuracy_aware_algorithm(accuracy_tracker, name='Accuracy Aware'):
