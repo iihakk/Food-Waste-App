@@ -131,7 +131,19 @@ st.markdown('<p class="sub-header">Compare ranking algorithms to minimize waste 
 with st.sidebar:
     st.markdown("### Simulation Settings")
 
-    num_days = st.slider("Simulation Days", 1, 30, 7)
+    # Cloud mode for faster runs on Streamlit Cloud
+    cloud_mode = st.checkbox(
+        "Cloud Mode (faster)",
+        value=False,
+        help="Use smaller dataset and fewer days for faster runs on cloud hosting"
+    )
+
+    if cloud_mode:
+        num_days = st.slider("Simulation Days", 1, 10, 3)
+        st.caption("Limited to 3 days in cloud mode")
+    else:
+        num_days = st.slider("Simulation Days", 1, 30, 7)
+
     n_stores = st.slider("Stores Shown (n)", 1, 20, 10,
                          help="Number of stores displayed to each customer (realistic: 10-15)")
     shop_prob = st.slider("Shopping Probability", 0.1, 1.0, 0.7,
@@ -163,10 +175,16 @@ with st.sidebar:
     if randomize:
         st.markdown("---")
         st.markdown("### Random Data Generation")
-        num_stores_gen = st.slider("Number of Stores", 10, 1000, 100,
-                                   help="Number of stores to generate (supports up to 1000)")
-        num_customers_gen = st.slider("Number of Customers", 100, 10000, 1000,
-                                      help="Number of customers to generate (supports up to 10000)")
+        if cloud_mode:
+            num_stores_gen = st.slider("Number of Stores", 10, 50, 20,
+                                       help="Limited in cloud mode")
+            num_customers_gen = st.slider("Number of Customers", 50, 500, 100,
+                                          help="Limited in cloud mode")
+        else:
+            num_stores_gen = st.slider("Number of Stores", 10, 1000, 100,
+                                       help="Number of stores to generate (supports up to 1000)")
+            num_customers_gen = st.slider("Number of Customers", 100, 10000, 1000,
+                                          help="Number of customers to generate (supports up to 10000)")
     else:
         num_stores_gen = 10
         num_customers_gen = 150
