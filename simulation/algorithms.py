@@ -69,9 +69,14 @@ def _calculate_distance_factor(customer_location, store_row, decay_km=5.0):
 
 def greedy_baseline(stores_df, n, current_bags, customer_valuations=None, customer_location=None):
     """
-    BASELINE ALGORITHM: Greedy by Rating with Distance Factor
+    BASELINE ALGORITHM: Pure Greedy by Rating
 
-    Strategy: Show highest-rated stores, with distance penalty for far stores.
+    Strategy: Show highest-rated stores with available bags.
+    This represents the current "dumb" approach that ignores:
+    - Customer location/distance
+    - Inventory levels
+    - Price optimization
+    - Customer preferences
     """
     # Filter to stores with available bags
     available_ids = [sid for sid, bags in current_bags.items() if bags > 0]
@@ -80,23 +85,9 @@ def greedy_baseline(stores_df, n, current_bags, customer_valuations=None, custom
     if available.empty:
         return []
 
-    # Calculate score: rating * distance_factor
-    scores = []
-    for _, row in available.iterrows():
-        sid = row['store_id']
-        rating = row['average_overall_rating']
-
-        # Distance factor (1.0 if no location, otherwise decays with distance)
-        dist_factor = _calculate_distance_factor(customer_location, row)
-
-        # Combined score: rating with distance penalty
-        # DISTANCE_WEIGHT controls how much distance matters
-        score = rating * (1 - DISTANCE_WEIGHT + DISTANCE_WEIGHT * dist_factor)
-        scores.append((sid, score))
-
-    # Sort by score descending and take top n
-    scores.sort(key=lambda x: x[1], reverse=True)
-    return [sid for sid, _ in scores[:n]]
+    # Pure greedy: just sort by rating, ignore everything else
+    top_n = available.nlargest(n, 'average_overall_rating')
+    return top_n['store_id'].tolist()
 
 
 def supply_demand_equilibrium(stores_df, n, current_bags, customer_valuations=None,

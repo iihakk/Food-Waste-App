@@ -138,6 +138,15 @@ with st.sidebar:
                           help="Chance a customer shops on any given day")
 
     st.markdown("---")
+    st.markdown("### Business Model")
+
+    midday_update = st.checkbox(
+        "Mid-day Inventory Update",
+        value=False,
+        help="Stores report actual inventory at mid-day. Morning customers see estimates, afternoon customers see real remaining bags."
+    )
+
+    st.markdown("---")
     st.markdown("### Algorithm")
 
     selected_algos = st.multiselect(
@@ -228,7 +237,8 @@ if run_btn:
             
             start_time = time.time()
             
-            results[algo_name] = engine.run(num_days, n_stores, algo_func, shop_prob)
+            results[algo_name] = engine.run(num_days, n_stores, algo_func, shop_prob,
+                                             midday_inventory_update=midday_update)
             
             end_time = time.time()
             execution_times[algo_name] = end_time - start_time

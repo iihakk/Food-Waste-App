@@ -102,7 +102,8 @@ class SimulationEngine:
         return R * c
 
     def run(self, num_days, n_stores, ranking_func, shopping_probability=0.7,
-            use_accuracy_adjustment=True, alternative_acceptance_rate=0.6):
+            use_accuracy_adjustment=True, alternative_acceptance_rate=0.6,
+            midday_inventory_update=False):
         """
         Run the simulation for a specified number of days.
 
@@ -114,6 +115,12 @@ class SimulationEngine:
           - If actual < reservations: some cancelled
           - Unsold = actual - fulfilled = waste
 
+        WITH MIDDAY UPDATE (midday_inventory_update=True):
+        - Morning customers (first 50%): See original estimates
+        - Mid-day: Stores report ACTUAL inventory
+        - Afternoon customers (last 50%): See actual remaining = actual - morning_reservations
+        - This allows algorithms to redirect customers to stores with excess inventory
+
         Args:
             num_days (int): Number of days to simulate
             n_stores (int): Number of stores shown to each customer
@@ -122,6 +129,7 @@ class SimulationEngine:
             shopping_probability (float): Probability a customer shops on any day (0.0-1.0)
             use_accuracy_adjustment (bool): Whether to adjust estimates based on history (future use)
             alternative_acceptance_rate (float): Probability customer accepts alternative when cancelled
+            midday_inventory_update (bool): If True, stores report actual inventory at mid-day
 
         Returns:
             dict: Results containing all KPIs and the Algorithm Score
@@ -181,9 +189,25 @@ class SimulationEngine:
 
             # ==================== CUSTOMER ARRIVAL PHASE ====================
             # Customers make RESERVATIONS based on estimated availability
-            for _, cust in self.customers.iterrows():
+
+            # Split customers into morning and afternoon for mid-day update
+            customer_list = list(self.customers.iterrows())
+            total_shoppers = len(customer_list)
+            midday_point = total_shoppers // 2
+            midday_updated = False
+
+            for customer_idx, (_, cust) in enumerate(customer_list):
                 if random.random() > shopping_probability:
                     continue
+
+                # ========== MID-DAY INVENTORY UPDATE ==========
+                # After morning customers (first 50%), stores report actual inventory
+                if midday_inventory_update and not midday_updated and customer_idx >= midday_point:
+                    midday_updated = True
+                    # Update remaining to reflect: actual bags - morning reservations
+                    for sid in store_ids:
+                        actual_remaining = daily_actual[sid] - daily_reservations[sid]
+                        remaining_estimated[sid] = max(0, actual_remaining)
 
                 total_customers += 1
                 cust_id = cust['customer_id']
@@ -200,8 +224,8 @@ class SimulationEngine:
                     if col in self.customers.columns:
                         customer_valuations[sid] = cust[col]
 
-                # Algorithm sees remaining ESTIMATES + customer preferences + location
-                # Location-aware algorithms can use customer_location for distance-based ranking
+                # Algorithm sees remaining inventory (estimated or actual depending on time of day)
+                # After mid-day update, algorithms see ACTUAL remaining inventory
                 displayed = ranking_func(self.stores, n_stores, remaining_estimated,
                                         customer_valuations=customer_valuations,
                                         customer_location=customer_location)
