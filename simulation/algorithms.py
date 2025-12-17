@@ -761,15 +761,21 @@ _GA_CURRENT_DAY_ACTUAL = {}
 _GA_CURRENT_DAY_PRICES = {}
 _GA_STORES_DF = None
 
-# GA Configuration
+# GA Configuration - OPTIMIZED for speed without compromising performance
 _GA_CONFIG = {
-    'population_size': 20,      # Number of chromosomes
+    'population_size': 12,      # Reduced from 20 - keep best presets + 4 random
     'mutation_rate': 0.15,      # Probability of mutation
     'crossover_rate': 0.7,      # Probability of crossover
     'elite_count': 2,           # Top chromosomes preserved each generation
     'tournament_size': 3,       # Tournament selection size
-    'evolve_every_n_days': 1,   # Evolve after this many days
+    'evolve_every_n_days': 2,   # Increased from 1 - more data per evolution
+    'shadow_sample_rate': 0.3,  # Only track 30% of customers for shadow sim
+    'early_stop_generations': 3, # Stop if no improvement for N generations
 }
+
+# Early stopping tracking
+_GA_NO_IMPROVEMENT_COUNT = 0
+_GA_LAST_BEST_FITNESS = -float('inf')
 
 
 class Chromosome:
@@ -1070,27 +1076,43 @@ def _evolve_population():
     Evolve the population for one generation.
     
     Steps:
-    1. Keep elite chromosomes (including current active if it's best)
-    2. Tournament selection for parents
-    3. Crossover to create offspring
-    4. Mutation
-    5. Replace population
+    1. Check for early stopping (no improvement for N generations)
+    2. Keep elite chromosomes (including current active if it's best)
+    3. Tournament selection for parents
+    4. Crossover to create offspring
+    5. Mutation
+    6. Replace population
     """
     global _GA_POPULATION, _GA_BEST_CHROMOSOME, _GA_BEST_FITNESS, _GA_GENERATION
-    
+    global _GA_NO_IMPROVEMENT_COUNT, _GA_LAST_BEST_FITNESS
+
     if _GA_POPULATION is None:
         return
-    
+
     # Sort by fitness (based on end-of-day evaluation)
     _GA_POPULATION.sort(key=lambda c: c.fitness, reverse=True)
-    
+
     # Update best if improved
-    if _GA_POPULATION[0].fitness > _GA_BEST_FITNESS:
+    current_best = _GA_POPULATION[0].fitness
+    if current_best > _GA_BEST_FITNESS:
         _GA_BEST_CHROMOSOME = _GA_POPULATION[0].copy()
-        _GA_BEST_FITNESS = _GA_POPULATION[0].fitness
-    
+        _GA_BEST_FITNESS = current_best
+
+    # EARLY STOPPING: Check if fitness has improved
+    improvement_threshold = 0.001  # 0.1% improvement considered significant
+    if current_best > _GA_LAST_BEST_FITNESS * (1 + improvement_threshold):
+        _GA_NO_IMPROVEMENT_COUNT = 0
+        _GA_LAST_BEST_FITNESS = current_best
+    else:
+        _GA_NO_IMPROVEMENT_COUNT += 1
+
+    # If no improvement for N generations, skip evolution (already converged)
+    if _GA_NO_IMPROVEMENT_COUNT >= _GA_CONFIG['early_stop_generations']:
+        _GA_GENERATION += 1
+        return  # Skip evolution - already converged
+
     new_population = []
-    
+
     # Elitism: keep top chromosomes unchanged
     for i in range(_GA_CONFIG['elite_count']):
         if i < len(_GA_POPULATION):
@@ -1099,23 +1121,23 @@ def _evolve_population():
             elite.total_fitness = 0.0
             elite.day_count = 0
             new_population.append(elite)
-    
+
     # Generate rest through selection, crossover, mutation
     while len(new_population) < _GA_CONFIG['population_size']:
         parent1 = _tournament_select(_GA_POPULATION, _GA_CONFIG['tournament_size'])
         parent2 = _tournament_select(_GA_POPULATION, _GA_CONFIG['tournament_size'])
-        
+
         if random.random() < _GA_CONFIG['crossover_rate']:
             child = _crossover(parent1, parent2)
         else:
             child = parent1.copy() if random.random() < 0.5 else parent2.copy()
-        
+
         child.mutate(_GA_CONFIG['mutation_rate'])
         child.fitness = 0.0
         child.total_fitness = 0.0
         child.day_count = 0
         new_population.append(child)
-    
+
     _GA_POPULATION = new_population
     _GA_GENERATION += 1
 
@@ -1167,26 +1189,33 @@ def ga_track_customer(n, customer_valuations):
     """
     Called for each customer during the day.
     Track what each chromosome WOULD select (shadow simulation).
-    
+
+    OPTIMIZED: Only sample a fraction of customers for shadow simulation.
+    This dramatically reduces computation while maintaining representative fitness.
+
     NOTE: The ACTIVE chromosome's selection is the one actually used.
     Other chromosomes just track for comparison.
     """
     global _GA_POPULATION, _GA_STORES_DF
-    
+
     if _GA_POPULATION is None or _GA_STORES_DF is None:
         return
-    
+
+    # OPTIMIZATION: Only track a sample of customers for shadow simulation
+    if random.random() > _GA_CONFIG['shadow_sample_rate']:
+        return  # Skip this customer for shadow tracking
+
     # For each chromosome, simulate what it would select
     for chrom in _GA_POPULATION:
         displayed = _apply_chromosome_ranking(
             chrom, _GA_STORES_DF, n, chrom.shadow_estimated, customer_valuations
         )
-        
+
         # Simulate customer choice from this chromosome's selection
         chosen, new_estimated = _simulate_customer_choice(
             displayed, customer_valuations, chrom.shadow_estimated
         )
-        
+
         if chosen:
             chrom.shadow_reservations[chosen] = chrom.shadow_reservations.get(chosen, 0) + 1
             chrom.shadow_estimated = new_estimated
@@ -1334,7 +1363,8 @@ def reset_genetic_algorithm():
     global _GA_BEST_FITNESS, _GA_GENERATION, _GA_DAY_COUNT
     global _GA_SHADOW_SELECTIONS, _GA_SHADOW_CUSTOMER_CHOICES
     global _GA_CURRENT_DAY_ESTIMATED, _GA_CURRENT_DAY_ACTUAL, _GA_CURRENT_DAY_PRICES, _GA_STORES_DF
-    
+    global _GA_NO_IMPROVEMENT_COUNT, _GA_LAST_BEST_FITNESS
+
     _GA_POPULATION = None
     _GA_ACTIVE_CHROMOSOME_IDX = 0
     _GA_BEST_CHROMOSOME = None
@@ -1347,6 +1377,8 @@ def reset_genetic_algorithm():
     _GA_CURRENT_DAY_ACTUAL = {}
     _GA_CURRENT_DAY_PRICES = {}
     _GA_STORES_DF = None
+    _GA_NO_IMPROVEMENT_COUNT = 0
+    _GA_LAST_BEST_FITNESS = -float('inf')
 
 
 def get_ga_evolved_weights():

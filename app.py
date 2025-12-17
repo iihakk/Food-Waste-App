@@ -292,88 +292,61 @@ if run_btn:
             st.metric("Fairness Score", f"{summary.get('fairness_score', 0):.1f}/100")
 
     else:
-        # Comparison table for multiple algorithms - sorted by Total Revenue
+        # Comparison table for multiple algorithms - Option 2: Dual View
         comp_data = []
         for algo_name, res in results.items():
             s = res['summary']
-            
+
             # Get revenue metrics
             revenue = s.get('total_revenue', 0)
-            lost_revenue = s.get('total_lost_revenue', 0)
-            total_revenue = revenue - lost_revenue  # Net revenue
-            
-            # Calculate waste rate
-            waste_rate = float(s.get('waste_rate', 0))
-            
+            lost_revenue = s.get('total_lost_revenue', 0)  # This is unsold × price
+
             # Get bag counts
-            cancelled = s.get('total_cancelled', 0)
             unsold = s.get('total_unsold', 0)
-            fulfilled = s.get('total_fulfilled', 0)
-            
-            # Estimate average price per bag from revenue/fulfilled
-            avg_price = revenue / fulfilled if fulfilled > 0 else 5.0
-            
-            # Waste Loss = unsold bags × avg_price
-            waste_loss = unsold * avg_price
-            
+
             comp_data.append({
                 'Algorithm': algo_name,
-                'Revenue': f"{revenue:,.0f}",
-                'Lost Revenue': f"{lost_revenue:,.0f}",
-                'Total Revenue': f"{total_revenue:,.0f}",
-                'Waste Loss': f"{waste_loss:,.0f}",
-                'Fulfilled': s.get('total_fulfilled', 0),
-                'Cancelled': s.get('total_cancelled', 0),
-                'Unsold': s.get('total_unsold', 0),
-                'Waste %': f"{waste_rate:.1f}",
+                'Revenue': revenue,
+                'Waste (bags)': unsold,
+                'Waste (EGP)': lost_revenue,
                 'Runtime': f"{execution_times[algo_name]:.3f}s"
             })
 
         comp_df = pd.DataFrame(comp_data)
-        
-        # Sort by Revenue (need to convert to numeric for sorting)
-        comp_df['_sort_revenue'] = comp_df['Revenue'].str.replace(',', '').astype(float)
-        comp_df = comp_df.sort_values('_sort_revenue', ascending=False).drop('_sort_revenue', axis=1)
-        
-        # Display the comparison table (only selected columns)
+
+        # Sort by Revenue descending (best first)
+        comp_df = comp_df.sort_values('Revenue', ascending=False)
+
+        # Format for display
+        display_df = comp_df.copy()
+        display_df['Revenue'] = display_df['Revenue'].apply(lambda x: f"{x:,.0f}")
+        display_df['Waste (EGP)'] = display_df['Waste (EGP)'].apply(lambda x: f"{x:,.0f}")
+
+        # Display the comparison table
         st.markdown("### Algorithm Comparison")
-        display_df = comp_df[['Algorithm', 'Revenue', 'Lost Revenue', 'Total Revenue', 'Unsold', 'Cancelled', 'Runtime']].copy()
-        display_df = display_df.rename(columns={'Unsold': 'Unsold Bags'})
         st.dataframe(display_df, use_container_width=True, hide_index=True)
         
         # ============================================
         # Overall Comparison Chart (Grouped Bar)
         # ============================================
         st.markdown("### Overall Algorithm Comparison")
-        
-        # Prepare numeric columns for the comparison chart
-        chart_df = comp_df.copy()
-        chart_df['Revenue_num'] = chart_df['Revenue'].str.replace(',', '').astype(float)
-        chart_df['Lost_Revenue_num'] = chart_df['Lost Revenue'].str.replace(',', '').astype(float)
-        chart_df['Total_Revenue_num'] = chart_df['Total Revenue'].str.replace(',', '').astype(float)
-        chart_df['Waste_Loss_num'] = chart_df['Waste Loss'].str.replace(',', '').astype(float)
-        
-        # Create grouped bar chart comparing key metrics
-        comparison_melted = chart_df.melt(
+
+        # Create grouped bar chart comparing Revenue vs Waste (EGP)
+        comparison_melted = comp_df.melt(
             id_vars=['Algorithm'],
-            value_vars=['Revenue_num', 'Lost_Revenue_num', 'Total_Revenue_num'],
+            value_vars=['Revenue', 'Waste (EGP)'],
             var_name='Metric',
             value_name='Value'
         )
-        comparison_melted['Metric'] = comparison_melted['Metric'].map({
-            'Revenue_num': 'Revenue',
-            'Lost_Revenue_num': 'Lost Revenue',
-            'Total_Revenue_num': 'Total Revenue'
-        })
-        
+
         fig_comparison = px.bar(
             comparison_melted,
             x='Algorithm',
             y='Value',
             color='Metric',
             barmode='group',
-            title='Revenue Metrics Comparison by Algorithm',
-            color_discrete_sequence=[COLORS[0], COLORS[3], COLORS[4]]
+            title='Revenue vs Waste by Algorithm',
+            color_discrete_sequence=[COLORS[0], COLORS[3]]
         )
         fig_comparison.update_layout(
             plot_bgcolor='rgba(0,0,0,0)',
@@ -382,22 +355,20 @@ if run_btn:
             yaxis_title='Amount (EGP)'
         )
         st.plotly_chart(fig_comparison, use_container_width=True)
-        
+
         # ============================================
-        # Revenue Comparison Charts
+        # Revenue & Waste Charts
         # ============================================
-        st.markdown("### Revenue Comparison")
-        
-        rev_col1, rev_col2 = st.columns(2)
-        
-        with rev_col1:
-            # Bar chart: Total Revenue (Net) per algorithm
+        chart_col1, chart_col2 = st.columns(2)
+
+        with chart_col1:
+            # Bar chart: Revenue per algorithm
             fig_rev = px.bar(
-                chart_df, 
-                x='Algorithm', 
-                y='Total_Revenue_num',
-                title='Total Revenue (Revenue - Lost) by Algorithm',
-                color='Total_Revenue_num',
+                comp_df,
+                x='Algorithm',
+                y='Revenue',
+                title='Revenue by Algorithm',
+                color='Revenue',
                 color_continuous_scale='Greens'
             )
             fig_rev.update_layout(
@@ -405,100 +376,76 @@ if run_btn:
                 paper_bgcolor='rgba(0,0,0,0)',
                 showlegend=False,
                 coloraxis_showscale=False,
-                yaxis_title='Total Revenue (EGP)'
+                yaxis_title='Revenue (EGP)'
             )
             st.plotly_chart(fig_rev, use_container_width=True)
-        
-        with rev_col2:
-            # Bar chart: Waste Loss by algorithm
-            fig_waste_loss = px.bar(
-                chart_df, 
-                x='Algorithm', 
-                y='Waste_Loss_num',
-                title='Waste Loss (EGP) by Algorithm',
-                color='Waste_Loss_num',
+
+        with chart_col2:
+            # Bar chart: Waste (EGP) per algorithm
+            fig_waste_egp = px.bar(
+                comp_df,
+                x='Algorithm',
+                y='Waste (EGP)',
+                title='Waste (EGP) by Algorithm',
+                color='Waste (EGP)',
                 color_continuous_scale='Reds'
             )
-            fig_waste_loss.update_layout(
+            fig_waste_egp.update_layout(
                 plot_bgcolor='rgba(0,0,0,0)',
                 paper_bgcolor='rgba(0,0,0,0)',
                 showlegend=False,
                 coloraxis_showscale=False,
-                yaxis_title='Waste Loss (EGP)'
+                yaxis_title='Waste (EGP)'
             )
-            st.plotly_chart(fig_waste_loss, use_container_width=True)
-        
+            st.plotly_chart(fig_waste_egp, use_container_width=True)
+
         # ============================================
-        # Waste Comparison
+        # Waste (Bags) Chart
         # ============================================
-        st.markdown("### Waste Comparison")
-        
-        waste_col1, waste_col2 = st.columns(2)
-        
-        with waste_col1:
-            # Bar chart: Absolute waste per algorithm
-            fig_waste_abs = px.bar(
-                chart_df, 
-                x='Algorithm', 
-                y='Unsold',
-                title='Unsold Bags (Waste) by Algorithm',
-                color='Unsold',
-                color_continuous_scale='Reds'
-            )
-            fig_waste_abs.update_layout(
-                plot_bgcolor='rgba(0,0,0,0)',
-                paper_bgcolor='rgba(0,0,0,0)',
-                showlegend=False,
-                coloraxis_showscale=False
-            )
-            st.plotly_chart(fig_waste_abs, use_container_width=True)
-        
-        with waste_col2:
-            # Bar chart: Waste Rate % per algorithm
-            chart_df['Waste_pct'] = chart_df['Waste %'].str.replace('%', '').astype(float)
-            fig_waste_pct = px.bar(
-                chart_df, 
-                x='Algorithm', 
-                y='Waste_pct',
-                title='Waste Rate (%) by Algorithm',
-                color='Waste_pct',
-                color_continuous_scale='RdYlGn_r'
-            )
-            fig_waste_pct.update_layout(
-                plot_bgcolor='rgba(0,0,0,0)',
-                paper_bgcolor='rgba(0,0,0,0)',
-                showlegend=False,
-                coloraxis_showscale=False
-            )
-            st.plotly_chart(fig_waste_pct, use_container_width=True)
-        
+        fig_waste_bags = px.bar(
+            comp_df,
+            x='Algorithm',
+            y='Waste (bags)',
+            title='Waste (Bags) by Algorithm',
+            color='Waste (bags)',
+            color_continuous_scale='Oranges'
+        )
+        fig_waste_bags.update_layout(
+            plot_bgcolor='rgba(0,0,0,0)',
+            paper_bgcolor='rgba(0,0,0,0)',
+            showlegend=False,
+            coloraxis_showscale=False,
+            yaxis_title='Unsold Bags'
+        )
+        st.plotly_chart(fig_waste_bags, use_container_width=True)
+
         # ============================================
         # Performance Highlights
         # ============================================
         st.markdown("### Performance Highlights")
-        
+
         highlight_col1, highlight_col2, highlight_col3 = st.columns(3)
-        
+
         with highlight_col1:
-            # Best total revenue
-            best_rev_idx = chart_df['Total_Revenue_num'].idxmax()
-            best_rev_algo = chart_df.loc[best_rev_idx, 'Algorithm']
-            best_rev = chart_df.loc[best_rev_idx, 'Total Revenue']
-            st.success(f"💰 **Highest Total Revenue**\n\n{best_rev_algo}\n\n{best_rev} EGP")
-        
+            # Highest revenue
+            best_rev_idx = comp_df['Revenue'].idxmax()
+            best_rev_algo = comp_df.loc[best_rev_idx, 'Algorithm']
+            best_rev = comp_df.loc[best_rev_idx, 'Revenue']
+            st.success(f"**Highest Revenue**\n\n{best_rev_algo}\n\n{best_rev:,.0f} EGP")
+
         with highlight_col2:
-            # Lowest lost revenue
-            best_loss_idx = chart_df['Lost_Revenue_num'].idxmin()
-            best_loss_algo = chart_df.loc[best_loss_idx, 'Algorithm']
-            best_loss = chart_df.loc[best_loss_idx, 'Lost Revenue']
-            st.success(f"� **Lowest Lost Revenue**\n\n{best_loss_algo}\n\n{best_loss} EGP")
-        
+            # Lowest waste (EGP)
+            best_waste_egp_idx = comp_df['Waste (EGP)'].idxmin()
+            best_waste_egp_algo = comp_df.loc[best_waste_egp_idx, 'Algorithm']
+            best_waste_egp = comp_df.loc[best_waste_egp_idx, 'Waste (EGP)']
+            st.success(f"**Lowest Waste (EGP)**\n\n{best_waste_egp_algo}\n\n{best_waste_egp:,.0f} EGP")
+
         with highlight_col3:
-            # Lowest waste
-            best_waste_idx = chart_df['Unsold'].idxmin()
-            best_waste_algo = chart_df.loc[best_waste_idx, 'Algorithm']
-            best_waste = chart_df.loc[best_waste_idx, 'Unsold']
-            st.success(f"🏆 **Lowest Waste**\n\n{best_waste_algo}\n\n{best_waste} bags")
+            # Lowest waste (bags)
+            best_waste_bags_idx = comp_df['Waste (bags)'].idxmin()
+            best_waste_bags_algo = comp_df.loc[best_waste_bags_idx, 'Algorithm']
+            best_waste_bags = comp_df.loc[best_waste_bags_idx, 'Waste (bags)']
+            st.success(f"**Lowest Waste (Bags)**\n\n{best_waste_bags_algo}\n\n{best_waste_bags:,} bags")
 
     # Charts
     st.markdown("## Analysis")
@@ -683,22 +630,28 @@ if run_btn:
             )
             st.plotly_chart(fig_waste_dist, use_container_width=True)
         
-        # Treemap visualization
-        st.markdown("#### Waste Treemap by Store")
-        
-        fig_treemap = px.treemap(
-            waste_df[waste_df['Unsold (Waste)'] > 0],
-            path=['Store'],
-            values='Unsold (Waste)',
-            color='Waste %',
-            color_continuous_scale='RdYlGn_r',
-            title='Waste Distribution (Size = Unsold Bags, Color = Waste %)'
-        )
-        fig_treemap.update_layout(
-            plot_bgcolor='rgba(0,0,0,0)',
-            paper_bgcolor='rgba(0,0,0,0)'
-        )
-        st.plotly_chart(fig_treemap, use_container_width=True)
+        # Waste by Store bar chart (replaced treemap due to library compatibility)
+        st.markdown("#### Waste by Store")
+
+        waste_by_store = waste_df[waste_df['Unsold (Waste)'] > 0].sort_values('Unsold (Waste)', ascending=True)
+        if len(waste_by_store) > 0:
+            fig_waste_bar = px.bar(
+                waste_by_store,
+                x='Unsold (Waste)',
+                y='Store',
+                orientation='h',
+                color='Waste %',
+                color_continuous_scale='RdYlGn_r',
+                title='Waste by Store (Color = Waste %)'
+            )
+            fig_waste_bar.update_layout(
+                plot_bgcolor='rgba(0,0,0,0)',
+                paper_bgcolor='rgba(0,0,0,0)',
+                height=max(400, len(waste_by_store) * 25)
+            )
+            st.plotly_chart(fig_waste_bar, use_container_width=True)
+        else:
+            st.info("No waste recorded - all bags were sold!")
         
         # Detailed table
         st.markdown("#### Detailed Waste Breakdown")
