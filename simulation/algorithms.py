@@ -10,21 +10,7 @@ which stores are displayed to customers. The goal is to optimize for:
 Each algorithm has the same signature:
     func(stores_df, n, current_bags, customer_valuations=None) -> list[store_id]
 
-Where:
-    - stores_df: DataFrame with store information
-    - n: Number of stores to return (display to customer)
-    - current_bags: Dict mapping store_id -> remaining bags
-    - customer_valuations: Dict mapping store_id -> customer's preference (0-5)
-                          If provided, enables PERSONALIZED ranking per customer
 
-Algorithm Design Techniques (allowed per course):
-1. Greedy - Make locally optimal choices
-2. Divide and Conquer - Break problem into subproblems
-3. Transform and Conquer - Change data representation
-4. Dynamic Programming - Optimal substructure + overlapping subproblems
-5. Backtracking - Build solution incrementally
-
-NOTE: Brute force is NOT allowed in this course.
 """
 
 import math
@@ -35,37 +21,12 @@ from collections import defaultdict
 from datetime import datetime, timedelta
 from enum import Enum
 from dataclasses import dataclass
-from typing import Optional, Dict, List, Tuple  
+from typing import Optional, Dict, List, Tuple 
+import pandas as pd
 
 
 def greedy_baseline(stores_df, n, current_bags, customer_valuations=None):
-    """
-    BASELINE ALGORITHM: Greedy by Rating
 
-    Strategy: Always show the highest-rated stores that have bags available.
-    This is the current system's approach.
-
-    Pros:
-    - Simple to implement
-    - Shows "best" stores to customers
-
-    Cons:
-    - Popular stores sell out quickly
-    - Less popular stores get no visibility
-    - Leads to unfair exposure distribution
-    - Results in more food waste at low-rated stores
-
-    Time Complexity: O(n log n) for sorting
-    Technique: Greedy
-
-    Args:
-        stores_df (DataFrame): Store data with 'store_id' and 'average_overall_rating'
-        n (int): Number of stores to display
-        current_bags (dict): {store_id: remaining_bags}
-
-    Returns:
-        list: Top n store IDs by rating that have bags available
-    """
     # Filter to stores with available bags
     available_ids = [sid for sid, bags in current_bags.items() if bags > 0]
     available = stores_df[stores_df['store_id'].isin(available_ids)]
@@ -73,240 +34,6 @@ def greedy_baseline(stores_df, n, current_bags, customer_valuations=None):
     # Sort by rating (descending) and take top n
     top_n = available.nlargest(n, 'average_overall_rating')
     return top_n['store_id'].tolist()
-
-
-def inventory_aware(stores_df, n, current_bags, customer_valuations=None):
-    """
-    IMPROVED ALGORITHM: Inventory-Aware Ranking
-
-    Strategy: Balance rating with inventory level to reduce waste.
-    Stores with more unsold bags get priority to reduce end-of-day waste.
-
-    Scoring formula:
-        score = 0.5 * (rating/5.0) + 0.5 * (bags/max_bags)
-
-    Pros:
-    - Reduces food waste by prioritizing stores with more inventory
-    - Still considers quality (rating)
-    - Better fairness than pure greedy
-
-    Cons:
-    - May show lower-rated stores
-    - Fixed 50/50 weight ratio may not be optimal
-
-    Time Complexity: O(n) for scoring + O(n log n) for sorting
-    Technique: Greedy with weighted scoring
-
-    Args:
-        stores_df (DataFrame): Store data
-        n (int): Number of stores to display
-        current_bags (dict): {store_id: remaining_bags}
-
-    Returns:
-        list: Top n store IDs by combined score
-    """
-    # Filter to stores with available bags
-    available_ids = [sid for sid, bags in current_bags.items() if bags > 0]
-    if not available_ids:
-        return []
-
-    available = stores_df[stores_df['store_id'].isin(available_ids)]
-    max_bags = max(current_bags[sid] for sid in available_ids)
-
-    # Calculate combined score for each store
-    scores = []
-    for _, row in available.iterrows():
-        sid = row['store_id']
-        # Normalize rating to 0-1 range
-        rating_score = row['average_overall_rating'] / 5.0
-        # Normalize inventory to 0-1 range
-        inventory_score = current_bags[sid] / max_bags
-
-        # Weighted combination: 50% rating + 50% inventory
-        score = 0.5 * rating_score + 0.5 * inventory_score
-        scores.append((sid, score))
-
-    # Sort by score descending and return top n
-    scores.sort(key=lambda x: x[1], reverse=True)
-    return [sid for sid, _ in scores[:n]]
-
-
-def inventory_rating_equilibrium(stores_df, n, current_bags, customer_valuations=None):
-    """
-    INVENTORY-RATING EQUILIBRIUM: Greedy with Inventory-Demand Balancing
-
-    Strategy: Extension of the Greedy Baseline.
-    Instead of sorting purely by rating, this algorithm seeks an 'equilibrium' 
-    where the highest rated stores (Demand) that also have the most stock (Supply) 
-    are prioritized. 
-    
-    It prevents the issue where the greedy baseline shows high-rated stores 
-    that might only have 1 bag left, ignoring a slightly lower-rated store 
-    with 50 bags that needs the customers more.
-
-    Formula:
-        Score = Rating_Normalized * (1 + Inventory_Normalized)
-
-    Pros:
-    - Maximizes sell-through rate (High Quality + High Volume)
-    - Prevents stock-outs at top stores by rotating in high-supply alternatives
-    - Maintains the "Best Stores" feel of the greedy baseline
-
-    Time Complexity: O(n log n)
-    Technique: Greedy (with weighted heuristic)
-
-    Args:
-        stores_df (DataFrame): Store data
-        n (int): Number of stores to display
-        current_bags (dict): {store_id: remaining_bags}
-
-    Returns:
-        list: Top n store IDs by equilibrium score
-    """
-    # 1. Filter to stores with available bags (Identical to Greedy Baseline)
-    available_ids = [sid for sid, bags in current_bags.items() if bags > 0]
-    if not available_ids:
-        return []
-
-    # Create a copy to avoid SettingWithCopy warnings on the original DF
-    available = stores_df[stores_df['store_id'].isin(available_ids)].copy()
-
-    # 2. Calculate Normalization Factors
-    # Avoid division by zero if max_bags is somehow 0 (though unlikely due to filter)
-    max_bags = max([current_bags[sid] for sid in available_ids]) if available_ids else 1
-    max_rating = 5.0
-
-    scores = []
-    for _, row in available.iterrows():
-        sid = row['store_id']
-        rating = row['average_overall_rating']
-        inventory = current_bags[sid]
-
-        # Demand Index (Normalized Rating)
-        demand_index = rating / max_rating
-
-        # Supply Index (Normalized Inventory)
-        supply_index = inventory / max_bags
-
-        # Equilibrium Score Calculation:
-        # We take the Demand (Rating) as the base, and boost it by the Supply (Inventory).
-        # - If a store has high rating but low inventory, it gets a standard score.
-        # - If a store has high rating AND high inventory, it gets a massive boost (Equilibrium).
-        score = demand_index * (1.0 + supply_index)
-        
-        scores.append((sid, score))
-
-    # 3. Sort by Score (descending) and take top n
-    scores.sort(key=lambda x: x[1], reverse=True)
-    
-    return [sid for sid, _ in scores[:n]]
-
-
-def underdog_boost(stores_df, n, current_bags, customer_valuations=None):
-    """
-    UNDERDOG BOOST: Inverse rating multiplier for inventory priority.
-
-    Key Insight: High-rated stores will sell regardless of visibility.
-    Low-rated stores with inventory need exposure to avoid waste.
-
-    Approach: Instead of adding rating and inventory, we use rating
-    as an INVERSE multiplier. Lower rating = higher boost for inventory.
-
-    Formula:
-        boost_factor = (5.5 - rating) / 4.5  # Range: ~0.1 to 1.0
-        score = inventory_norm * boost_factor + 0.2 * rating_norm
-
-    A 3.0 rated store with 20 bags scores HIGHER than a 4.5 rated store
-    with 20 bags, because the 3.0 store needs help getting customers.
-
-    Time Complexity: O(S log S)
-    Technique: Greedy with inverse weighting
-    """
-    available_ids = [sid for sid, bags in current_bags.items() if bags > 0]
-    if not available_ids:
-        return []
-
-    available = stores_df[stores_df['store_id'].isin(available_ids)]
-    max_bags = max(current_bags[sid] for sid in available_ids)
-
-    scores = []
-    for _, row in available.iterrows():
-        sid = row['store_id']
-        rating = row['average_overall_rating']
-        inventory_norm = current_bags[sid] / max_bags
-        rating_norm = rating / 5.0
-
-        # Inverse boost: lower rating = higher multiplier
-        # Rating 5.0 -> boost 0.11, Rating 3.0 -> boost 0.56, Rating 1.0 -> boost 1.0
-        boost_factor = (5.5 - rating) / 4.5
-
-        # Inventory heavily weighted, rating just prevents showing terrible stores
-        score = inventory_norm * boost_factor + 0.2 * rating_norm
-        scores.append((sid, score))
-
-    scores.sort(key=lambda x: x[1], reverse=True)
-    return [sid for sid, _ in scores[:n]]
-
-
-def waste_prevention_threshold(stores_df, n, current_bags, customer_valuations=None):
-    """
-    WASTE PREVENTION THRESHOLD: Binary rescue system for at-risk stores.
-
-    Key Insight: Waste only happens when a store gets 0 customers.
-    A store with 5 bags and 0 customers = 100% waste.
-    A store with 30 bags and 1 customer = 0% waste (just less items per bag).
-
-    Approach: Calculate "risk score" based on inventory vs expected demand.
-    High-rated stores have high expected demand, low-rated stores have low demand.
-    If inventory >> expected_demand, store is "at risk" and gets priority.
-
-    Risk calculation:
-        expected_demand = rating / 5.0 * avg_customers_per_store
-        risk = inventory / expected_demand (capped at 3.0)
-
-    Stores with risk > 1.5 are considered "at-risk" and prioritized.
-
-    Time Complexity: O(S log S)
-    Technique: Transform and Conquer (transform to risk scores)
-    """
-    available_ids = [sid for sid, bags in current_bags.items() if bags > 0]
-    if not available_ids:
-        return []
-
-    available = stores_df[stores_df['store_id'].isin(available_ids)]
-
-    # Estimate: assume each store might get ~3 customers on average
-    avg_customers_estimate = 3.0
-
-    scores = []
-    for _, row in available.iterrows():
-        sid = row['store_id']
-        rating = row['average_overall_rating']
-        inventory = current_bags[sid]
-
-        # Expected demand based on rating (higher rating = more expected customers)
-        expected_demand = (rating / 5.0) * avg_customers_estimate
-        expected_demand = max(0.5, expected_demand)  # Floor to avoid division issues
-
-        # Risk: how much inventory vs expected demand
-        # High risk = lots of inventory relative to expected customers
-        risk = min(3.0, inventory / expected_demand)
-
-        # At-risk stores (risk > 1.5) get priority boost
-        if risk > 1.5:
-            # Rescue priority: high risk stores shown first
-            score = 1.0 + risk  # Score 2.5 to 4.0 for at-risk
-        else:
-            # Normal stores: blend of rating and inventory
-            rating_norm = rating / 5.0
-            score = 0.6 * rating_norm + 0.4 * (inventory / 30.0)
-
-        scores.append((sid, score))
-
-    scores.sort(key=lambda x: x[1], reverse=True)
-    return [sid for sid, _ in scores[:n]]
-
-
 
 
 def supply_demand_equilibrium(stores_df, n, current_bags, customer_valuations=None, demand_forecast=None):
@@ -364,556 +91,6 @@ def supply_demand_equilibrium(stores_df, n, current_bags, customer_valuations=No
     scores.sort(key=lambda x: x[1], reverse=True)
     return [sid for sid, _ in scores[:n]]
 
-def accuracy_aware_ranking(stores_df, n, current_bags, customer_valuations=None, accuracy_tracker=None):
-    """
-    ACCURACY-AWARE ALGORITHM: Adjusts ranking based on historical accuracy.
-    
-    Strategy (Transform and Conquer):
-    1. Transform estimated bags to adjusted bags using accuracy history
-    2. Rank stores by adjusted availability + rating
-    3. After primary allocation, redistribute buffer bags
-    
-    Two-Phase Approach:
-    - Phase 1: Allocate based on adjusted (conservative) estimates
-    - Phase 2: Redistribute buffer bags to stores that might have extras
-    
-    Scoring formula:
-        score = 0.4 * rating_norm + 0.4 * adjusted_inventory_norm + 0.2 * accuracy_bonus
-    
-    Where accuracy_bonus rewards stores with consistent estimates.
-    
-    Pros:
-    - Reduces over-promising (fewer cancellations)
-    - Accounts for bakery reliability
-    - Fairer to accurate bakeries
-    
-    Cons:
-    - Requires historical data to be effective
-    - May underestimate new bakeries
-    
-    Time Complexity: O(S log S) where S = number of stores
-    Technique: Transform and Conquer + Greedy
-    
-    Args:
-        stores_df (DataFrame): Store data
-        n (int): Number of stores to display
-        current_bags (dict): {store_id: estimated_remaining_bags}
-        accuracy_tracker (AccuracyTracker): Historical accuracy data
-        
-    Returns:
-        list: Top n store IDs by accuracy-adjusted score
-    """
-    # Filter to stores with available bags
-    available_ids = [sid for sid, bags in current_bags.items() if bags > 0]
-    if not available_ids:
-        return []
-    
-    available = stores_df[stores_df['store_id'].isin(available_ids)]
-    
-    # If no accuracy tracker, fall back to inventory-aware
-    if accuracy_tracker is None:
-        # Import here to avoid circular dependency
-        return inventory_aware(stores_df, n, current_bags)
-    
-    # Phase 1: Calculate adjusted estimates
-    adjusted_bags = {}
-    buffer_bags = {}
-    accuracy_scores = {}
-    
-    for sid in available_ids:
-        estimated = current_bags[sid]
-        adjusted_bags[sid] = accuracy_tracker.get_adjusted_estimate(sid, estimated)
-        buffer_bags[sid] = accuracy_tracker.get_buffer_bags(sid, estimated)
-        accuracy_scores[sid] = accuracy_tracker.get_accuracy_ratio(sid)
-    
-    # Normalization
-    max_adjusted = max(adjusted_bags.values()) if adjusted_bags else 1
-    
-    # Phase 2: Score and rank stores
-    scores = []
-    for _, row in available.iterrows():
-        sid = row['store_id']
-        
-        # Normalize rating (0-1)
-        rating_norm = row['average_overall_rating'] / 5.0
-        
-        # Normalize adjusted inventory (0-1)
-        inv_norm = adjusted_bags[sid] / max_adjusted
-        
-        # Accuracy bonus: reward consistent bakeries (closer to 1.0 ratio)
-        accuracy_ratio = accuracy_scores[sid]
-        # Score is highest at 1.0, decreases as ratio deviates
-        accuracy_bonus = 1 - abs(1 - accuracy_ratio)
-        
-        # Combined score
-        score = (
-            0.40 * rating_norm +
-            0.40 * inv_norm +
-            0.20 * accuracy_bonus
-        )
-        
-        scores.append({
-            'store_id': sid,
-            'score': score,
-            'adjusted_bags': adjusted_bags[sid],
-            'buffer_bags': buffer_bags[sid],
-            'accuracy_ratio': accuracy_ratio
-        })
-    
-    # Sort by score descending (greedy selection)
-    scores.sort(key=lambda x: x['score'], reverse=True)
-    
-    # Return top n store IDs
-    return [s['store_id'] for s in scores[:n]]
-
-
-def accuracy_aware_with_buffer_redistribution(stores_df, n, current_bags, customer_valuations=None,
-                                               accuracy_tracker=None,
-                                               include_buffer=True):
-    """
-    ADVANCED ACCURACY-AWARE ALGORITHM with Buffer Redistribution
-    
-    Extended version that also returns buffer bag information for
-    secondary allocation after primary stores are determined.
-    
-    Two-tier display strategy:
-    - Primary: Stores ranked by adjusted estimates (guaranteed bags)
-    - Secondary: Additional stores with buffer bags (might have extras)
-    
-    Args:
-        stores_df (DataFrame): Store data
-        n (int): Number of primary stores to display
-        current_bags (dict): {store_id: estimated_remaining_bags}
-        accuracy_tracker (AccuracyTracker): Historical accuracy data
-        include_buffer (bool): Whether to include buffer redistribution info
-        
-    Returns:
-        dict: {
-            'primary_stores': list of store_ids,
-            'buffer_stores': list of (store_id, buffer_bags),
-            'total_buffer': total redistributable bags
-        }
-    """
-    # Get primary ranking
-    primary = accuracy_aware_ranking(stores_df, n, current_bags, accuracy_tracker)
-    
-    if not include_buffer or accuracy_tracker is None:
-        return {
-            'primary_stores': primary,
-            'buffer_stores': [],
-            'total_buffer': 0
-        }
-    
-    # Calculate buffer bags for redistribution
-    all_ids = [sid for sid, bags in current_bags.items() if bags > 0]
-    buffer_info = []
-    total_buffer = 0
-    
-    for sid in all_ids:
-        buffer = accuracy_tracker.get_buffer_bags(sid, current_bags[sid])
-        if buffer > 0:
-            buffer_info.append((sid, buffer))
-            total_buffer += buffer
-    
-    # Sort buffer stores by buffer amount (most buffer first)
-    buffer_info.sort(key=lambda x: x[1], reverse=True)
-    
-    return {
-        'primary_stores': primary,
-        'buffer_stores': buffer_info,
-        'total_buffer': total_buffer
-    }
-
-
-# Factory function to create algorithm with bound accuracy tracker
-def create_accuracy_aware_algorithm(accuracy_tracker):
-    """
-    Factory function to create an accuracy-aware ranking algorithm
-    with a bound accuracy tracker.
-    
-    This allows the algorithm to maintain the same signature as other
-    algorithms while having access to historical accuracy data.
-    
-    Args:
-        accuracy_tracker (AccuracyTracker): Initialized tracker with history
-        
-    Returns:
-        callable: Ranking function with standard signature
-    
-    Usage:
-        tracker = AccuracyTracker()
-        # ... populate tracker with historical data ...
-        algo = create_accuracy_aware_algorithm(tracker)
-        ALGORITHMS['Accuracy Aware'] = algo
-    """
-    def ranking_func(stores_df, n, current_bags, customer_valuations=None):
-        return accuracy_aware_ranking(stores_df, n, current_bags, accuracy_tracker)
-    
-    ranking_func.__doc__ = accuracy_aware_ranking.__doc__
-    return ranking_func
-
-# =============================================================================
-# PLACEHOLDER FUNCTIONS FOR TEAM MEMBERS
-# Each team member should implement their own algorithm here
-# =============================================================================
-
-# =============================================================================
-# ADVANCED ALGORITHMS - HIGH PERFORMANCE
-# These algorithms are designed to dramatically improve the Algorithm Score
-# by targeting the main weakness: high waste rate (76% baseline)
-# =============================================================================
-
-import os
-import pandas as pd
-
-# Cache for customer demand aggregation (computed once)
-_DEMAND_CACHE = None
-
-
-def _get_aggregate_demand(stores_df):
-    """
-    Helper function to pre-compute aggregate demand from customer valuations.
-
-    CORRECTED MODEL:
-    - 150 customers, 70% shopping rate = ~105 daily shoppers
-    - Each customer sees 5 stores, buys from 1
-    - 27 stores competing = ~4 customers per store on average
-    - But distribution is NOT uniform - customers prefer high-valuation stores
-
-    This transforms raw customer valuations into REALISTIC demand predictions.
-    Cached to avoid recomputation on every call.
-
-    Returns:
-        dict: {store_id: predicted_daily_demand}
-    """
-    global _DEMAND_CACHE
-
-    if _DEMAND_CACHE is not None:
-        return _DEMAND_CACHE
-
-    # Load customers data
-    try:
-        data_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data')
-        customers_path = os.path.join(data_dir, 'customers.csv')
-        customers_df = pd.read_csv(customers_path)
-    except Exception:
-        # Fallback: return empty dict, algorithms will use rating-based estimates
-        return {}
-
-    demand = {}
-    valuation_cols = [c for c in customers_df.columns if 'valuation' in c]
-    num_customers = len(customers_df)
-    num_stores = len(valuation_cols)
-
-    # Parameters matching simulation
-    shopping_rate = 0.7
-    daily_shoppers = num_customers * shopping_rate  # ~105
-    avg_per_store = daily_shoppers / num_stores  # ~4
-
-    for col in valuation_cols:
-        # Extract store_id from column name like "store100_valuation"
-        try:
-            store_id = int(col.replace('store', '').replace('_valuation', '').replace('_id', ''))
-        except ValueError:
-            continue
-
-        # Count customers by interest level
-        high_interest = (customers_df[col] >= 4).sum()      # Valuation 4-5
-        medium_interest = (customers_df[col] >= 3).sum()    # Valuation 3+
-
-        # Interest ratio: what fraction of customers like this store?
-        interest_ratio = (high_interest * 2 + medium_interest) / (num_customers * 3)
-
-        # Realistic demand: base demand * interest multiplier
-        # High interest stores get more, low interest get less
-        predicted = avg_per_store * (0.5 + interest_ratio * 2)
-        demand[store_id] = max(1.0, predicted)
-
-    _DEMAND_CACHE = demand
-    return demand
-
-
-# Cache for customer preferences (computed once)
-_CUSTOMER_PREFS_CACHE = None
-
-
-def _get_customer_preferences():
-    """
-    Load customer valuations matrix for coverage analysis.
-
-    Returns:
-        dict: {store_id: set of customer_ids with valuation >= 3.5}
-    """
-    global _CUSTOMER_PREFS_CACHE
-
-    if _CUSTOMER_PREFS_CACHE is not None:
-        return _CUSTOMER_PREFS_CACHE
-
-    try:
-        data_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data')
-        customers_path = os.path.join(data_dir, 'customers.csv')
-        customers_df = pd.read_csv(customers_path)
-    except Exception:
-        return {}
-
-    preferences = {}
-    valuation_cols = [c for c in customers_df.columns if 'valuation' in c]
-
-    for col in valuation_cols:
-        try:
-            store_id = int(col.replace('store', '').replace('_valuation', '').replace('_id', ''))
-        except ValueError:
-            continue
-
-        # Customers with valuation >= 3.5 for this store
-        interested_customers = set(customers_df[customers_df[col] >= 3.5].index.tolist())
-        preferences[store_id] = interested_customers
-
-    _CUSTOMER_PREFS_CACHE = preferences
-    return preferences
-
-
-def _calculate_coverage(selected_stores, preferences):
-    """
-    Calculate how many unique customers are covered by a store selection.
-
-    Args:
-        selected_stores: list of store_ids
-        preferences: dict from _get_customer_preferences()
-
-    Returns:
-        int: number of unique customers covered
-    """
-    covered = set()
-    for sid in selected_stores:
-        if sid in preferences:
-            covered.update(preferences[sid])
-    return len(covered)
-
-
-def dp_optimal_visibility(stores_df, n, current_bags, customer_valuations=None):
-    """
-    DYNAMIC PROGRAMMING - OPTIMAL VISIBILITY ALLOCATION (DP-OVA)
-
-    STRATEGY: Greedy + Coverage optimization for the last store.
-
-    Analysis shows:
-    - Greedy's first 4 stores ([115, 110, 116, 103]) cover 128 customers
-    - Greedy's 5th store (108) adds 10 customers at price 72.2
-    - Store 124 adds 13 customers (+3 more) at price 52.0
-
-    Hypothesis: Replacing 108 with 124 improves coverage (141 vs 138)
-    which should reduce leave rate, improving satisfaction score enough
-    to offset any revenue efficiency loss.
-
-    Algorithm:
-    1. Pick top (n-1) stores by rating (like Greedy)
-    2. For the last slot, pick the store that adds MOST new customers
-       among stores with rating >= 4.0
-
-    Time Complexity: O(S log S + S)
-    Technique: Dynamic Programming (Greedy with final coverage optimization)
-
-    Args:
-        stores_df (DataFrame): Store data
-        n (int): Number of stores to display
-        current_bags (dict): {store_id: remaining_bags}
-
-    Returns:
-        list: Store IDs with coverage-optimized last slot
-    """
-    available_ids = [sid for sid, bags in current_bags.items() if bags > 0]
-    if not available_ids:
-        return []
-
-    if len(available_ids) <= n:
-        return available_ids
-
-    available = stores_df[stores_df['store_id'].isin(available_ids)]
-
-    # Get customer preferences
-    preferences = _get_customer_preferences()
-
-    # Build store info
-    store_info = {}
-    for _, row in available.iterrows():
-        sid = row['store_id']
-        store_info[sid] = {
-            'rating': row['average_overall_rating'],
-            'inventory': current_bags[sid],
-            'customers': preferences.get(sid, set())
-        }
-
-    # Step 1: Pick top (n-1) stores by rating (like Greedy)
-    sorted_by_rating = sorted(available_ids,
-                              key=lambda s: store_info[s]['rating'],
-                              reverse=True)
-
-    selected = sorted_by_rating[:n-1]
-
-    # Calculate coverage so far
-    covered = set()
-    for sid in selected:
-        covered.update(store_info[sid]['customers'])
-
-    # Step 2: For last slot, pick store that adds MOST new customers
-    # among stores with rating >= 4.0
-    best_last = None
-    best_new_coverage = -1
-
-    for sid in available_ids:
-        if sid in selected:
-            continue
-
-        info = store_info[sid]
-
-        # Require minimum rating
-        if info['rating'] < 4.0:
-            continue
-
-        # Calculate new coverage this store would add
-        new_coverage = len(info['customers'] - covered)
-
-        if new_coverage > best_new_coverage:
-            best_new_coverage = new_coverage
-            best_last = sid
-
-    # Fallback: if no good store found, pick highest-rated remaining
-    if best_last is None:
-        remaining = [s for s in available_ids if s not in selected]
-        if remaining:
-            best_last = max(remaining, key=lambda s: store_info[s]['rating'])
-
-    if best_last:
-        selected.append(best_last)
-
-    return selected[:n]
-
-
-def customer_aware_demand_prediction(stores_df, n, current_bags, customer_valuations=None):
-    """
-    CUSTOMER-AWARE DEMAND PREDICTION (CADP)
-
-    CRITICAL INSIGHT: Balance CUSTOMER COVERAGE with WASTE PREVENTION.
-    Unlike DP which focuses purely on coverage, CADP optimizes for:
-    1. Customer coverage (ensure customers find stores they like)
-    2. Supply-demand matching (identify and prioritize oversupplied stores)
-    3. Waste prevention (penalize stores that will waste without visibility)
-
-    Transform and Conquer Approach:
-    - TRANSFORM: Convert raw valuations → demand predictions → supply gaps
-    - CONQUER: Score stores on coverage + supply gap for optimal selection
-
-    Key Difference from DP: Explicitly weights supply-demand imbalance
-    to prevent waste at oversupplied stores.
-
-    Time Complexity: O(S log S)
-    Technique: Transform and Conquer (valuations → demand → priority ranking)
-
-    Args:
-        stores_df (DataFrame): Store data
-        n (int): Number of stores to display
-        current_bags (dict): {store_id: remaining_bags}
-
-    Returns:
-        list: Store IDs optimized for coverage + waste prevention
-    """
-    available_ids = [sid for sid, bags in current_bags.items() if bags > 0]
-    if not available_ids:
-        return []
-
-    available = stores_df[stores_df['store_id'].isin(available_ids)]
-    max_bags = max(current_bags[sid] for sid in available_ids)
-
-    # Get both customer preferences and demand predictions
-    preferences = _get_customer_preferences()
-    aggregate_demand = _get_aggregate_demand(stores_df)
-
-    # Build store metrics
-    store_metrics = []
-    for _, row in available.iterrows():
-        sid = row['store_id']
-        rating = row['average_overall_rating']
-        inventory = current_bags[sid]
-
-        # Customer coverage
-        customer_set = preferences.get(sid, set())
-        coverage_count = len(customer_set)
-
-        # Demand prediction and supply gap
-        predicted_demand = aggregate_demand.get(sid, 2 + rating * 2)
-        supply_gap = inventory - predicted_demand
-
-        # Waste risk: stores with high inventory relative to demand
-        waste_risk = max(0, supply_gap) / max_bags
-
-        store_metrics.append({
-            'sid': sid,
-            'rating': rating,
-            'inventory': inventory,
-            'coverage': coverage_count,
-            'customers': customer_set,
-            'supply_gap': supply_gap,
-            'waste_risk': waste_risk
-        })
-
-    # Get prices for revenue optimization
-    prices = stores_df.set_index('store_id')['price'].to_dict()
-    max_price = max(prices.values()) if prices else 1
-
-    # Add price to store metrics
-    for store in store_metrics:
-        store['price'] = prices.get(store['sid'], 0)
-
-    # GREEDY SELECTION: Maximize coverage + revenue + prevent waste
-    selected = []
-    covered_customers = set()
-
-    for _ in range(n):
-        best_store = None
-        best_score = -1
-
-        for store in store_metrics:
-            sid = store['sid']
-            if sid in selected:
-                continue
-
-            # Marginal coverage (new customers added)
-            new_coverage = len(store['customers'] - covered_customers)
-            coverage_score = new_coverage / 50.0  # Normalize
-
-            # Inventory score
-            inventory_score = store['inventory'] / max_bags
-
-            # Waste risk score (prioritize stores at risk of waste)
-            waste_score = store['waste_risk']
-
-            # Rating floor
-            rating_score = store['rating'] / 5.0
-
-            # Price score (for revenue)
-            price_score = store['price'] / max_price
-
-            # Combined priority: Coverage + Revenue + Waste Prevention + Inventory + Quality
-            priority = (
-                0.30 * coverage_score +     # Customer coverage
-                0.25 * price_score +        # Revenue potential
-                0.20 * waste_score +        # Waste prevention
-                0.15 * inventory_score +    # Inventory level
-                0.10 * rating_score         # Quality floor
-            )
-
-            if priority > best_score:
-                best_score = priority
-                best_store = store
-
-        if best_store is None:
-            break
-
-        selected.append(best_store['sid'])
-        covered_customers.update(best_store['customers'])
-
-    return selected[:n]
 
 
 def time_decay_urgency(stores_df, n, current_bags, closing_times=None, current_time=None, 
@@ -1208,219 +385,7 @@ def time_decay_urgency(stores_df, n, current_bags, closing_times=None, current_t
     
     return selected[:n]
 
-def constraint_backtracking_fairness(stores_df, n, current_bags, customer_valuations=None):
-    """
-    CONSTRAINT BACKTRACKING WITH FAIRNESS GUARANTEES (CBB-FG)
 
-    Uses backtracking to find store selections that satisfy hard constraints
-    while maximizing customer coverage.
-
-    CRITICAL INSIGHT: Add COVERAGE as a hard constraint!
-    The selection must cover at least 90% of customers (135+ of 150).
-
-    Hard Constraints:
-        1. Coverage: Selection must cover >= 90% of customers (valuation >= 3.5)
-        2. Quality: Average rating of shown stores >= 3.5
-        3. Waste Prevention: At least 1 "at-risk" store (inventory/demand > 1.5)
-        4. Diversity: No single rating tier can have > 80% of slots
-
-    Backtracking Algorithm:
-        1. Sort candidates by coverage contribution
-        2. Try adding stores greedily by marginal coverage
-        3. Backtrack if constraints are violated
-        4. Return first valid solution meeting coverage target
-
-    Time Complexity: O(S * n) in practice due to greedy ordering
-    Technique: Backtracking with Constraint Satisfaction
-
-    Args:
-        stores_df (DataFrame): Store data
-        n (int): Number of stores to display
-        current_bags (dict): {store_id: remaining_bags}
-
-    Returns:
-        list: Store IDs satisfying all constraints with max coverage
-    """
-    available_ids = [sid for sid, bags in current_bags.items() if bags > 0]
-    if not available_ids:
-        return []
-
-    if len(available_ids) <= n:
-        return available_ids
-
-    available = stores_df[stores_df['store_id'].isin(available_ids)]
-    max_bags = max(current_bags[sid] for sid in available_ids)
-
-    # Get customer preferences and demand predictions
-    preferences = _get_customer_preferences()
-    aggregate_demand = _get_aggregate_demand(stores_df)
-
-    # Total customers to cover
-    all_customers = set()
-    for sid in available_ids:
-        all_customers.update(preferences.get(sid, set()))
-    total_customers = len(all_customers)
-
-    # Classify stores
-    store_info = {}
-    at_risk_stores = set()
-
-    for _, row in available.iterrows():
-        sid = row['store_id']
-        rating = row['average_overall_rating']
-        inventory = current_bags[sid]
-        customer_set = preferences.get(sid, set())
-
-        # Calculate risk ratio
-        expected_demand = aggregate_demand.get(sid, 2 + rating * 2)
-        expected_demand = max(1.0, expected_demand)
-        risk_ratio = inventory / expected_demand
-
-        store_info[sid] = {
-            'rating': rating,
-            'inventory': inventory,
-            'risk_ratio': risk_ratio,
-            'is_at_risk': risk_ratio > 1.5,
-            'customers': customer_set,
-            'coverage': len(customer_set)
-        }
-
-        if risk_ratio > 1.5:
-            at_risk_stores.add(sid)
-
-    # Constraints
-    MIN_COVERAGE_RATIO = 0.90  # Must cover 90% of customers
-    MIN_AVG_RATING = 3.5
-    MIN_AT_RISK = min(1, len(at_risk_stores))  # At least 1 if available
-
-    def check_constraints(selection, covered):
-        """Check if selection satisfies all constraints."""
-        if len(selection) == 0:
-            return True
-
-        # Only check final constraints when selection is complete
-        if len(selection) == n:
-            # Constraint 1: Coverage >= 90%
-            coverage_ratio = len(covered) / total_customers if total_customers > 0 else 0
-            if coverage_ratio < MIN_COVERAGE_RATIO:
-                return False
-
-            # Constraint 2: Average rating >= 3.5
-            avg_rating = sum(store_info[s]['rating'] for s in selection) / len(selection)
-            if avg_rating < MIN_AVG_RATING:
-                return False
-
-            # Constraint 3: At least MIN_AT_RISK at-risk stores
-            at_risk_count = sum(1 for s in selection if s in at_risk_stores)
-            if at_risk_count < MIN_AT_RISK:
-                return False
-
-        return True
-
-    # Get prices for revenue optimization
-    prices = stores_df.set_index('store_id')['price'].to_dict()
-    max_price = max(prices.values()) if prices else 1
-
-    def get_candidates(selection, covered):
-        """Get candidates ordered by MARGINAL COVERAGE + REVENUE."""
-        candidates = []
-        for sid in available_ids:
-            if sid in selection:
-                continue
-
-            info = store_info[sid]
-
-            # Marginal coverage (NEW customers this store adds)
-            marginal = len(info['customers'] - covered)
-            marginal_score = marginal / 50.0  # Normalize
-
-            # Inventory bonus
-            inventory_score = info['inventory'] / max_bags
-
-            # At-risk bonus
-            risk_bonus = 0.3 if sid in at_risk_stores else 0
-
-            # Rating bonus
-            rating_score = info['rating'] / 5.0
-
-            # Price bonus (for revenue)
-            price_score = prices.get(sid, 0) / max_price
-
-            # Priority: Coverage + Revenue + Inventory + Risk + Quality
-            priority = (
-                0.35 * marginal_score +     # Coverage is key
-                0.25 * price_score +        # Revenue potential
-                0.20 * inventory_score +    # Inventory helps
-                0.10 * risk_bonus +         # At-risk bonus
-                0.10 * rating_score         # Quality floor
-            )
-
-            candidates.append((sid, priority, marginal))
-
-        # Sort by priority (coverage + revenue weighted)
-        candidates.sort(key=lambda x: x[1], reverse=True)
-        return [(sid, marginal) for sid, _, marginal in candidates]
-
-    # GREEDY with constraint checking (simpler than full backtracking)
-    selected = []
-    covered_customers = set()
-
-    for _ in range(n):
-        candidates = get_candidates(selected, covered_customers)
-
-        found = False
-        for sid, marginal in candidates:
-            # Try adding this store
-            test_selection = selected + [sid]
-            test_covered = covered_customers | store_info[sid]['customers']
-
-            # Check if we can still satisfy constraints
-            if len(test_selection) < n:
-                # Partial selection - just continue
-                selected.append(sid)
-                covered_customers = test_covered
-                found = True
-                break
-            else:
-                # Final selection - check all constraints
-                if check_constraints(test_selection, test_covered):
-                    selected.append(sid)
-                    covered_customers = test_covered
-                    found = True
-                    break
-
-        if not found:
-            # No valid candidate - take best remaining
-            candidates = get_candidates(selected, covered_customers)
-            if candidates:
-                selected.append(candidates[0][0])
-                covered_customers.update(store_info[candidates[0][0]]['customers'])
-
-    # If we still don't have n stores, fill with remaining
-    if len(selected) < n:
-        remaining = [s for s in available_ids if s not in selected]
-        remaining.sort(key=lambda s: store_info[s]['coverage'], reverse=True)
-        selected.extend(remaining[:n - len(selected)])
-
-    return selected[:n]
-
-
-# Legacy placeholder (kept for backwards compatibility)
-def custom_algorithm_1(stores_df, n, current_bags, customer_valuations=None):
-    """
-    PLACEHOLDER: Team Member 1's Algorithm
-    Redirects to DP Optimal Visibility for backwards compatibility.
-    """
-    return dp_optimal_visibility(stores_df, n, current_bags)
-
-
-# =============================================================================
-# PERSONALIZED RANKING ALGORITHMS
-# =============================================================================
-# These algorithms use customer_valuations to show DIFFERENT stores to
-# DIFFERENT customers based on their preferences. This is the key innovation
-# that allows them to dramatically outperform non-personalized algorithms.
-# =============================================================================
 
 def personalized_top_k(stores_df, n, current_bags, customer_valuations=None):
     """
@@ -1494,9 +459,9 @@ def personalized_waste_aware(stores_df, n, current_bags, customer_valuations=Non
     if not available_ids:
         return []
 
-    # If no customer valuations, fall back to inventory-aware
+    # If no customer valuations, fall back to greedy_baseline
     if customer_valuations is None:
-        return inventory_aware(stores_df, n, current_bags)
+        return greedy_baseline(stores_df, n, current_bags)
 
     store_info = stores_df.set_index('store_id').to_dict('index')
     max_bags = max(current_bags.get(sid, 1) for sid in available_ids)
@@ -1649,9 +614,9 @@ def personalized_reliable(stores_df, n, current_bags, customer_valuations=None):
     if not available_ids:
         return []
 
-    # If no customer valuations, fall back to reputation recovery (best non-personalized)
+    # If no customer valuations, fall back to greedy_baseline (best non-personalized)
     if customer_valuations is None:
-        return reputation_recovery(stores_df, n, current_bags)
+        return greedy_baseline(stores_df, n, current_bags)
 
     store_info = stores_df.set_index('store_id').to_dict('index')
     max_bags = max(current_bags.get(sid, 1) for sid in available_ids)
@@ -1729,9 +694,9 @@ def personalized_ultimate(stores_df, n, current_bags, customer_valuations=None):
     if not available_ids:
         return []
 
-    # If no customer valuations, fall back to reputation recovery
+    # If no customer valuations, fall back to greedy_baseline
     if customer_valuations is None:
-        return reputation_recovery(stores_df, n, current_bags)
+        return greedy_baseline(stores_df, n, current_bags)
 
     store_info = stores_df.set_index('store_id').to_dict('index')
     max_bags = max(current_bags.get(sid, 1) for sid in available_ids)
@@ -1764,28 +729,589 @@ def personalized_ultimate(stores_df, n, current_bags, customer_valuations=None):
 # =============================================================================
 # GENETIC ALGORITHM 
 # =============================================================================
+# 
+# ARCHITECTURE (End-of-Day Evaluation):
+# 1. Active chromosome (starts as supply_demand_equilibrium) makes real decisions
+# 2. All chromosomes track what they WOULD select in background (shadow simulation)
+# 3. At END OF DAY: Compute what KPIs each chromosome WOULD have produced
+# 4. If a background chromosome produces better results, swap it to active
+# 5. Evolve population and repeat
+#
+# This ensures we never perform WORSE than supply_demand_equilibrium,
+# but can IMPROVE if GA finds better weights.
+# =============================================================================
 
-# Global state for GA
-_GA_BEST_WEIGHTS = None
-_GA_GENERATION = 0
+import random
+
+# Global state for GA - persists across simulation days
+_GA_POPULATION = None          # List of chromosomes (weight vectors)
+_GA_ACTIVE_CHROMOSOME_IDX = 0  # Index of chromosome making REAL decisions
+_GA_BEST_CHROMOSOME = None     # Best chromosome found so far
+_GA_BEST_FITNESS = -float('inf')  # Best fitness score
+_GA_GENERATION = 0             # Current generation
+_GA_DAY_COUNT = 0              # Number of days simulated
+
+# Shadow tracking - what each chromosome WOULD have selected
+_GA_SHADOW_SELECTIONS = {}     # {chromosome_idx: {store_id: count}}
+_GA_SHADOW_CUSTOMER_CHOICES = {} # {chromosome_idx: [(customer_valuations, displayed_stores)]}
+
+# Current day's actual data (set by engine callback)
+_GA_CURRENT_DAY_ESTIMATED = {}
+_GA_CURRENT_DAY_ACTUAL = {}
+_GA_CURRENT_DAY_PRICES = {}
+_GA_STORES_DF = None
+
+# GA Configuration
+_GA_CONFIG = {
+    'population_size': 20,      # Number of chromosomes
+    'mutation_rate': 0.15,      # Probability of mutation
+    'crossover_rate': 0.7,      # Probability of crossover
+    'elite_count': 2,           # Top chromosomes preserved each generation
+    'tournament_size': 3,       # Tournament selection size
+    'evolve_every_n_days': 1,   # Evolve after this many days
+}
+
+
+class Chromosome:
+    """
+    A chromosome represents weights for store ranking.
+    
+    The ACTIVE chromosome makes real decisions.
+    Other chromosomes run in background (shadow simulation) to evaluate alternatives.
+    
+    Genes (weights) control the ranking formula:
+    - w_inventory_urgency: Multiplier strength for inventory factor
+    - w_customer_match: Multiplier strength for price/match factor
+    - w_spread_demand: (unused in current formula, reserved for future)
+    - w_time_pressure: (unused in current formula, reserved for future)
+    
+    Chromosome #1 is EXACTLY supply_demand_equilibrium:
+    w_inventory_urgency=0.50, w_customer_match=0.30
+    
+    This gives: score = base_rating * (1 + 0.5*supply) * (1 + 0.3*price)
+    """
+    
+    def __init__(self, weights=None):
+        if weights is None:
+            # Random initialization - bias toward supply_demand_equilibrium-like weights
+            raw = [
+                random.uniform(0.3, 0.6),   # w_inventory_urgency (like 0.5 in equilibrium)
+                random.uniform(0.2, 0.5),   # w_customer_match (like 0.3 in equilibrium)
+                random.uniform(0.05, 0.2),  # w_spread_demand (not used in current formula)
+                random.uniform(0.05, 0.15)  # w_time_pressure (not used in current formula)
+            ]
+            total = sum(raw)
+            self.weights = {
+                'w_inventory_urgency': raw[0] / total,
+                'w_customer_match': raw[1] / total,
+                'w_spread_demand': raw[2] / total,
+                'w_time_pressure': raw[3] / total,
+            }
+        else:
+            self.weights = weights.copy()
+        
+        self.fitness = 0.0
+        self.total_fitness = 0.0  # Cumulative across all days
+        self.day_count = 0        # Number of days evaluated
+        
+        # Shadow tracking for this chromosome
+        self.shadow_reservations = {}  # {store_id: count} what this chromosome would select
+        self.shadow_estimated = {}     # Copy of estimated bags at start of day
+    
+    def mutate(self, mutation_rate):
+        """Apply random mutation to weights."""
+        if random.random() < mutation_rate:
+            # Pick a random weight to mutate
+            keys = list(self.weights.keys())
+            key1, key2 = random.sample(keys, 2)
+            
+            # Transfer some weight from one to another
+            delta = random.uniform(0.05, 0.2) * self.weights[key1]
+            self.weights[key1] -= delta
+            self.weights[key2] += delta
+            
+            # Ensure non-negative
+            for k in self.weights:
+                self.weights[k] = max(0.01, self.weights[k])
+            
+            # Renormalize
+            total = sum(self.weights.values())
+            for k in self.weights:
+                self.weights[k] /= total
+    
+    def copy(self):
+        """Create a copy of this chromosome."""
+        c = Chromosome(self.weights)
+        c.fitness = self.fitness
+        c.total_fitness = self.total_fitness
+        c.day_count = self.day_count
+        c.shadow_reservations = self.shadow_reservations.copy()
+        c.shadow_estimated = self.shadow_estimated.copy()
+        return c
+    
+    def reset_shadow(self, estimated_bags):
+        """Reset shadow tracking for a new day."""
+        self.shadow_reservations = {}
+        self.shadow_estimated = estimated_bags.copy()
+    
+    def __repr__(self):
+        w = self.weights
+        return f"Chromosome(inv={w['w_inventory_urgency']:.2f}, match={w['w_customer_match']:.2f}, fit={self.fitness:.2f})"
+
+
+def _crossover(parent1: Chromosome, parent2: Chromosome) -> Chromosome:
+    """
+    Create offspring by combining two parents (uniform crossover).
+    """
+    child_weights = {}
+    for key in parent1.weights:
+        # 50% chance to inherit from each parent
+        if random.random() < 0.5:
+            child_weights[key] = parent1.weights[key]
+        else:
+            child_weights[key] = parent2.weights[key]
+    
+    # Renormalize
+    total = sum(child_weights.values())
+    for k in child_weights:
+        child_weights[k] /= total
+    
+    return Chromosome(child_weights)
+
+
+def _tournament_select(population: list, tournament_size: int) -> Chromosome:
+    """Select a chromosome using tournament selection."""
+    tournament = random.sample(population, min(tournament_size, len(population)))
+    return max(tournament, key=lambda c: c.fitness)
+
+
+def _initialize_population():
+    """
+    Initialize the GA population.
+    
+    IMPORTANT: Chromosome #1 (index 0) is the ACTIVE chromosome that makes real decisions.
+    It is initialized to EXACTLY match supply_demand_equilibrium.
+    
+    This ensures GA starts EQUAL to supply_demand_equilibrium and can only improve.
+    """
+    global _GA_POPULATION, _GA_ACTIVE_CHROMOSOME_IDX, _GA_BEST_CHROMOSOME, _GA_BEST_FITNESS
+    
+    population = []
+    
+    # Chromosome #1: EXACT COPY OF SUPPLY_DEMAND_EQUILIBRIUM (this is the ACTIVE one)
+    # Score = base_rating * (1 + 0.5*supply) * (1 + 0.3*price)
+    population.append(Chromosome({
+        'w_inventory_urgency': 0.50,  # EXACTLY like supply_demand_equilibrium
+        'w_customer_match': 0.30,     # EXACTLY like supply_demand_equilibrium
+        'w_spread_demand': 0.10,
+        'w_time_pressure': 0.10
+    }))
+    
+    # Chromosome #2: Higher inventory emphasis
+    population.append(Chromosome({
+        'w_inventory_urgency': 0.60,
+        'w_customer_match': 0.25,
+        'w_spread_demand': 0.08,
+        'w_time_pressure': 0.07
+    }))
+    
+    # Chromosome #3: Higher customer match
+    population.append(Chromosome({
+        'w_inventory_urgency': 0.40,
+        'w_customer_match': 0.40,
+        'w_spread_demand': 0.10,
+        'w_time_pressure': 0.10
+    }))
+    
+    # Chromosome #4: Very high inventory weight (aggressive waste reduction)
+    population.append(Chromosome({
+        'w_inventory_urgency': 0.70,
+        'w_customer_match': 0.15,
+        'w_spread_demand': 0.10,
+        'w_time_pressure': 0.05
+    }))
+    
+    # Chromosome #5: Lower inventory, higher match (customer-centric)
+    population.append(Chromosome({
+        'w_inventory_urgency': 0.35,
+        'w_customer_match': 0.45,
+        'w_spread_demand': 0.10,
+        'w_time_pressure': 0.10
+    }))
+    
+    # Chromosome #6: Slight variations from equilibrium
+    population.append(Chromosome({
+        'w_inventory_urgency': 0.55,
+        'w_customer_match': 0.28,
+        'w_spread_demand': 0.10,
+        'w_time_pressure': 0.07
+    }))
+    
+    # Chromosome #7: Another variation
+    population.append(Chromosome({
+        'w_inventory_urgency': 0.48,
+        'w_customer_match': 0.35,
+        'w_spread_demand': 0.10,
+        'w_time_pressure': 0.07
+    }))
+    
+    # Chromosome #8: Balanced
+    population.append(Chromosome({
+        'w_inventory_urgency': 0.45,
+        'w_customer_match': 0.35,
+        'w_spread_demand': 0.12,
+        'w_time_pressure': 0.08
+    }))
+    
+    # Fill rest with random chromosomes
+    while len(population) < _GA_CONFIG['population_size']:
+        population.append(Chromosome())
+    
+    _GA_POPULATION = population
+    _GA_ACTIVE_CHROMOSOME_IDX = 0  # Start with supply_demand_equilibrium mimic
+    _GA_BEST_CHROMOSOME = population[0].copy()
+    _GA_BEST_FITNESS = -float('inf')
+
+
+def _evaluate_selection(selected_stores, current_bags, customer_valuations, store_ratings, prices, exposure_counts=None):
+    """
+    Evaluate store selection for WASTE MINIMIZATION.
+    
+    Primary Goal: Select stores that will actually SELL their bags
+    
+    Fitness Score (higher = better waste reduction):
+    1. Inventory cleared: Prioritize high-inventory stores
+    2. Customer match: Customer is likely to buy from this store
+    3. Spread bonus: Don't over-concentrate on few stores
+    
+    The BEST selection shows high-inventory stores to interested customers!
+    """
+    if not selected_stores:
+        return 0.0
+    
+    total_bags = sum(current_bags.values()) if current_bags else 1
+    max_bags = max(current_bags.values()) if current_bags else 1
+    num_stores = len(current_bags)
+    avg_bags = total_bags / num_stores if num_stores > 0 else 1
+    
+    fitness = 0.0
+    
+    for sid in selected_stores:
+        bags = current_bags.get(sid, 0)
+        price = prices.get(sid, 5.0)
+        
+        # --- INVENTORY URGENCY (main factor) ---
+        inventory_score = bags / max_bags if max_bags > 0 else 0
+        
+        # Extra boost for stores way above average
+        if bags > avg_bags * 1.5:
+            inventory_score *= 1.5
+        
+        # --- CUSTOMER MATCH ---
+        if customer_valuations:
+            customer_interest = customer_valuations.get(sid, 2.5) / 5.0
+        else:
+            customer_interest = store_ratings.get(sid, 3.0) / 5.0
+        
+        waste_reduction_potential = inventory_score * (0.5 + 0.5 * customer_interest)
+        spread_bonus = 0.1 if bags > avg_bags else 0.05
+        store_fitness = waste_reduction_potential + spread_bonus
+        fitness += store_fitness
+    
+    return fitness / len(selected_stores)
+
+
+def _apply_chromosome_ranking(chromosome, stores_df, n, current_bags, customer_valuations):
+    """
+    Rank stores using MULTIPLICATIVE scoring (EXACTLY like supply_demand_equilibrium).
+    
+    Formula: Score = base_rating * (1 + w_inventory*supply_index) * (1 + w_match*price_index)
+    
+    When w_inventory=0.5 and w_match=0.3, this is IDENTICAL to supply_demand_equilibrium.
+    """
+    available_ids = [sid for sid, bags in current_bags.items() if bags > 0]
+    if not available_ids:
+        return []
+    
+    if len(available_ids) <= n:
+        return available_ids
+    
+    available = stores_df[stores_df['store_id'].isin(available_ids)].copy()
+    
+    max_bags = max(current_bags.get(sid, 1) for sid in available_ids)
+    log_max_bags = math.log1p(max_bags)
+    max_price = available['price'].max() if not available.empty else 1
+    
+    w = chromosome.weights
+    
+    scores = []
+    for _, row in available.iterrows():
+        sid = row['store_id']
+        inventory = current_bags.get(sid, 0)
+        price = row.get('price', 5.0)
+        
+        if customer_valuations and sid in customer_valuations:
+            base_rating = customer_valuations[sid]
+        else:
+            base_rating = row['average_overall_rating']
+        
+        supply_index = math.log1p(inventory) / log_max_bags if log_max_bags > 0 else 0
+        price_index = price / max_price if max_price > 0 else 0
+        
+        score = base_rating * (1.0 + w['w_inventory_urgency'] * supply_index) * (1.0 + w['w_customer_match'] * price_index)
+        scores.append((sid, score))
+    
+    scores.sort(key=lambda x: x[1], reverse=True)
+    return [sid for sid, _ in scores[:n]]
+
+
+def _evolve_population():
+    """
+    Evolve the population for one generation.
+    
+    Steps:
+    1. Keep elite chromosomes (including current active if it's best)
+    2. Tournament selection for parents
+    3. Crossover to create offspring
+    4. Mutation
+    5. Replace population
+    """
+    global _GA_POPULATION, _GA_BEST_CHROMOSOME, _GA_BEST_FITNESS, _GA_GENERATION
+    
+    if _GA_POPULATION is None:
+        return
+    
+    # Sort by fitness (based on end-of-day evaluation)
+    _GA_POPULATION.sort(key=lambda c: c.fitness, reverse=True)
+    
+    # Update best if improved
+    if _GA_POPULATION[0].fitness > _GA_BEST_FITNESS:
+        _GA_BEST_CHROMOSOME = _GA_POPULATION[0].copy()
+        _GA_BEST_FITNESS = _GA_POPULATION[0].fitness
+    
+    new_population = []
+    
+    # Elitism: keep top chromosomes unchanged
+    for i in range(_GA_CONFIG['elite_count']):
+        if i < len(_GA_POPULATION):
+            elite = _GA_POPULATION[i].copy()
+            elite.fitness = 0.0  # Reset for next evaluation
+            elite.total_fitness = 0.0
+            elite.day_count = 0
+            new_population.append(elite)
+    
+    # Generate rest through selection, crossover, mutation
+    while len(new_population) < _GA_CONFIG['population_size']:
+        parent1 = _tournament_select(_GA_POPULATION, _GA_CONFIG['tournament_size'])
+        parent2 = _tournament_select(_GA_POPULATION, _GA_CONFIG['tournament_size'])
+        
+        if random.random() < _GA_CONFIG['crossover_rate']:
+            child = _crossover(parent1, parent2)
+        else:
+            child = parent1.copy() if random.random() < 0.5 else parent2.copy()
+        
+        child.mutate(_GA_CONFIG['mutation_rate'])
+        child.fitness = 0.0
+        child.total_fitness = 0.0
+        child.day_count = 0
+        new_population.append(child)
+    
+    _GA_POPULATION = new_population
+    _GA_GENERATION += 1
+
+
+# =============================================================================
+# END-OF-DAY EVALUATION FUNCTIONS
+# =============================================================================
+
+def ga_start_day(estimated_bags, stores_df):
+    """
+    Called at START of each simulated day.
+    Reset shadow tracking for all chromosomes.
+    """
+    global _GA_POPULATION, _GA_STORES_DF, _GA_CURRENT_DAY_ESTIMATED
+    
+    if _GA_POPULATION is None:
+        _initialize_population()
+    
+    _GA_STORES_DF = stores_df
+    _GA_CURRENT_DAY_ESTIMATED = estimated_bags.copy()
+    
+    # Reset shadow tracking for all chromosomes
+    for chrom in _GA_POPULATION:
+        chrom.reset_shadow(estimated_bags)
+
+
+def _simulate_customer_choice(displayed_stores, customer_valuations, remaining_bags):
+    """
+    Simulate what store a customer would pick from displayed options.
+    Returns (selected_store_id, remaining_bags_after).
+    """
+    best_store = None
+    best_val = 0
+    
+    for sid in displayed_stores:
+        val = customer_valuations.get(sid, 0) if customer_valuations else 0
+        if val > best_val and remaining_bags.get(sid, 0) > 0:
+            best_val = val
+            best_store = sid
+    
+    if best_store and remaining_bags.get(best_store, 0) > 0:
+        remaining_bags[best_store] -= 1
+        return best_store, remaining_bags
+    
+    return None, remaining_bags
+
+
+def ga_track_customer(n, customer_valuations):
+    """
+    Called for each customer during the day.
+    Track what each chromosome WOULD select (shadow simulation).
+    
+    NOTE: The ACTIVE chromosome's selection is the one actually used.
+    Other chromosomes just track for comparison.
+    """
+    global _GA_POPULATION, _GA_STORES_DF
+    
+    if _GA_POPULATION is None or _GA_STORES_DF is None:
+        return
+    
+    # For each chromosome, simulate what it would select
+    for chrom in _GA_POPULATION:
+        displayed = _apply_chromosome_ranking(
+            chrom, _GA_STORES_DF, n, chrom.shadow_estimated, customer_valuations
+        )
+        
+        # Simulate customer choice from this chromosome's selection
+        chosen, new_estimated = _simulate_customer_choice(
+            displayed, customer_valuations, chrom.shadow_estimated
+        )
+        
+        if chosen:
+            chrom.shadow_reservations[chosen] = chrom.shadow_reservations.get(chosen, 0) + 1
+            chrom.shadow_estimated = new_estimated
+
+
+def ga_end_day(actual_bags, prices):
+    """
+    Called at END of each simulated day.
+    
+    Evaluate what KPIs each chromosome WOULD have produced.
+    Swap active chromosome if a background one did better.
+    Evolve population.
+    """
+    global _GA_POPULATION, _GA_ACTIVE_CHROMOSOME_IDX, _GA_DAY_COUNT, _GA_BEST_CHROMOSOME, _GA_BEST_FITNESS
+    
+    if _GA_POPULATION is None:
+        return
+    
+    _GA_DAY_COUNT += 1
+    
+    # Evaluate each chromosome based on shadow simulation
+    for chrom in _GA_POPULATION:
+        fitness = _compute_chromosome_fitness(chrom, actual_bags, prices)
+        chrom.total_fitness += fitness
+        chrom.day_count += 1
+        chrom.fitness = chrom.total_fitness / chrom.day_count
+    
+    # Find best chromosome this day
+    best_idx = 0
+    best_fitness = _GA_POPULATION[0].fitness
+    for i, chrom in enumerate(_GA_POPULATION):
+        if chrom.fitness > best_fitness:
+            best_fitness = chrom.fitness
+            best_idx = i
+    
+    # If a background chromosome is better, swap it to active
+    if best_idx != _GA_ACTIVE_CHROMOSOME_IDX:
+        # Swap positions so best becomes index 0 (active)
+        _GA_POPULATION[0], _GA_POPULATION[best_idx] = _GA_POPULATION[best_idx], _GA_POPULATION[0]
+        _GA_ACTIVE_CHROMOSOME_IDX = 0
+    
+    # Update global best
+    if best_fitness > _GA_BEST_FITNESS:
+        _GA_BEST_CHROMOSOME = _GA_POPULATION[0].copy()
+        _GA_BEST_FITNESS = best_fitness
+    
+    # Evolve population every N days
+    if _GA_DAY_COUNT % _GA_CONFIG['evolve_every_n_days'] == 0:
+        _evolve_population()
+
+
+def _compute_chromosome_fitness(chromosome, actual_bags, prices):
+    """
+    Compute fitness based on what this chromosome's selections WOULD have produced.
+    
+    UNIFIED LOGIC (same as engine.py):
+    - Unsold bags = Actual bags that weren't sold (waste)
+    - Lost Revenue = Unsold bags × Price
+    
+    Example: Store has 10 actual bags, chromosome led to 7 reservations
+    - If reservations (7) <= actual (10): fulfilled=7, unsold=3, lost_revenue=3×price
+    - If reservations (12) > actual (10): fulfilled=10, unsold=0, lost_revenue=0
+    
+    Fitness = Revenue - (0.5 × Lost Revenue)
+    Higher revenue, lower waste = higher fitness.
+    """
+    reservations = chromosome.shadow_reservations
+    
+    total_revenue = 0.0
+    total_lost_revenue = 0.0
+    total_unsold = 0
+    
+    # Process each store that got reservations from this chromosome
+    for sid, reserved in reservations.items():
+        actual = actual_bags.get(sid, 0)
+        price = prices.get(sid, 5.0)
+        
+        # EXACT same logic as engine.py
+        if reserved <= actual:
+            # All reservations fulfilled, excess = waste
+            fulfilled = reserved
+            unsold = actual - reserved
+        else:
+            # Not enough actual bags - some cancelled, but NO waste
+            fulfilled = actual
+            unsold = 0
+        
+        revenue = fulfilled * price
+        lost_revenue = unsold * price  # Lost Revenue = Unsold × Price
+        
+        total_revenue += revenue
+        total_lost_revenue += lost_revenue
+        total_unsold += unsold
+    
+    # NOTE: We do NOT penalize stores that got no reservations from this chromosome.
+    # The chromosome only controls which stores it shows to customers.
+    # Stores it didn't show are not its "fault" - they would have the same waste
+    # regardless of which algorithm is used.
+    
+    # Fitness: maximize revenue, minimize waste (lost revenue)
+    fitness = total_revenue - (0.5 * total_lost_revenue)
+    
+    return fitness
 
 
 def genetic_algorithm_ranking(stores_df, n, current_bags, customer_valuations=None):
     """
-    SMART WASTE-FOCUSED SELECTION using Genetic Algorithm principles.
+    GENETIC ALGORITHM with End-of-Day Evaluation.
     
-    KEY INSIGHT: Customer picks store with HIGHEST valuation from displayed.
+    ARCHITECTURE:
+    1. Active chromosome (initially supply_demand_equilibrium) makes REAL decisions
+    2. All chromosomes track shadow selections in background
+    3. At end of day: evaluate what each chromosome WOULD have produced
+    4. If a background chromosome did better, swap it to become active
+    5. Evolve population
     
-    WINNING STRATEGY:
-    - Find stores this customer values highly (they'll actually buy)
-    - Among those, prioritize high-inventory stores (more to sell/waste)
-    - This ensures customer buys AND it's from a store that needs sales
-    
-    This beats greedy because greedy shows high-rated stores regardless of:
-    1. Whether THIS customer values them
-    2. Whether they have inventory to sell
+    This ensures:
+    - We START at supply_demand_equilibrium performance (never worse)
+    - We can only IMPROVE as GA finds better weights
     """
-    global _GA_BEST_WEIGHTS, _GA_GENERATION
+    global _GA_POPULATION, _GA_ACTIVE_CHROMOSOME_IDX
+    
+    # Initialize on first call
+    if _GA_POPULATION is None:
+        _initialize_population()
     
     available_ids = [sid for sid, bags in current_bags.items() if bags > 0]
     if not available_ids:
@@ -1794,96 +1320,70 @@ def genetic_algorithm_ranking(stores_df, n, current_bags, customer_valuations=No
     if len(available_ids) <= n:
         return available_ids
     
-    max_bags = max(current_bags.get(sid, 0) for sid in available_ids)
-    total_bags = sum(current_bags.get(sid, 0) for sid in available_ids)
+    # Track this customer for shadow simulation
+    ga_track_customer(n, customer_valuations)
     
-    # Pre-compute store ratings
-    store_ratings = {}
-    for _, row in stores_df.iterrows():
-        store_ratings[row['store_id']] = row['average_overall_rating']
-    
-    if customer_valuations:
-        # === PERSONALIZED WASTE OPTIMIZATION ===
-        # Show stores this customer will BUY FROM that also need to sell
-        
-        # Find customer's preferences
-        customer_prefs = [(sid, customer_valuations.get(sid, 0)) for sid in available_ids]
-        customer_prefs.sort(key=lambda x: x[1], reverse=True)
-        
-        # Customer's top choice (what they'd pick from any set)
-        top_val = customer_prefs[0][1] if customer_prefs else 0
-        
-        scores = []
-        for sid in available_ids:
-            valuation = customer_valuations.get(sid, 0)
-            inventory = current_bags[sid]
-            rating = store_ratings.get(sid, 3.0)
-            
-            # Normalize scores
-            val_score = valuation / 5.0
-            inv_score = inventory / max_bags if max_bags > 0 else 0
-            rat_score = rating / 5.0
-            
-            # SMART WEIGHTING based on customer preference level
-            if valuation >= 4:  # Customer really likes this store
-                score = 0.4 * val_score + 0.5 * inv_score + 0.1 * rat_score
-            elif valuation >= 3:  # Customer is okay with this store  
-                score = 0.3 * val_score + 0.5 * inv_score + 0.2 * rat_score
-            else:  # Customer doesn't like this store much
-                score = 0.2 * val_score + 0.6 * inv_score + 0.2 * rat_score
-            
-            scores.append((sid, score, valuation, inventory))
-        
-        scores.sort(key=lambda x: x[1], reverse=True)
-        selected = [sid for sid, _, _, _ in scores[:n]]
-        
-        # CRITICAL CHECK: Make sure we include at least one store customer values
-        selected_vals = [customer_valuations.get(sid, 0) for sid in selected]
-        max_selected_val = max(selected_vals) if selected_vals else 0
-        
-        if max_selected_val < 3 and top_val >= 3:
-            # Replace lowest-scored selection with customer's top choice
-            top_choice = customer_prefs[0][0]
-            if top_choice not in selected and len(selected) > 0:
-                selected[-1] = top_choice
-        
-    else:
-        # === NO PERSONALIZATION: INVENTORY-FOCUSED ===
-        scores = []
-        for sid in available_ids:
-            inventory = current_bags[sid]
-            rating = store_ratings.get(sid, 3.0)
-            
-            inv_score = inventory / max_bags if max_bags > 0 else 0
-            rat_score = rating / 5.0
-            
-            # Heavy inventory focus
-            score = 0.7 * inv_score + 0.3 * rat_score
-            scores.append((sid, score))
-        
-        scores.sort(key=lambda x: x[1], reverse=True)
-        selected = [sid for sid, _ in scores[:n]]
-    
-    _GA_GENERATION += 1
-    return selected
+    # Use ACTIVE chromosome for actual ranking
+    active_chromosome = _GA_POPULATION[_GA_ACTIVE_CHROMOSOME_IDX]
+    return _apply_chromosome_ranking(active_chromosome, stores_df, n, current_bags, customer_valuations)
 
 
 def reset_genetic_algorithm():
-    """Reset the genetic algorithm state."""
-    global _GA_BEST_WEIGHTS, _GA_GENERATION
-    _GA_BEST_WEIGHTS = None
+    """Reset the genetic algorithm state for a new simulation."""
+    global _GA_POPULATION, _GA_ACTIVE_CHROMOSOME_IDX, _GA_BEST_CHROMOSOME
+    global _GA_BEST_FITNESS, _GA_GENERATION, _GA_DAY_COUNT
+    global _GA_SHADOW_SELECTIONS, _GA_SHADOW_CUSTOMER_CHOICES
+    global _GA_CURRENT_DAY_ESTIMATED, _GA_CURRENT_DAY_ACTUAL, _GA_CURRENT_DAY_PRICES, _GA_STORES_DF
+    
+    _GA_POPULATION = None
+    _GA_ACTIVE_CHROMOSOME_IDX = 0
+    _GA_BEST_CHROMOSOME = None
+    _GA_BEST_FITNESS = -float('inf')
     _GA_GENERATION = 0
+    _GA_DAY_COUNT = 0
+    _GA_SHADOW_SELECTIONS = {}
+    _GA_SHADOW_CUSTOMER_CHOICES = {}
+    _GA_CURRENT_DAY_ESTIMATED = {}
+    _GA_CURRENT_DAY_ACTUAL = {}
+    _GA_CURRENT_DAY_PRICES = {}
+    _GA_STORES_DF = None
 
 
 def get_ga_evolved_weights():
-    """Get current GA state."""
-    global _GA_GENERATION
+    """Get current GA state and best evolved weights for revenue optimization."""
+    global _GA_BEST_CHROMOSOME, _GA_BEST_FITNESS, _GA_GENERATION, _GA_POPULATION
+    
+    if _GA_BEST_CHROMOSOME is None:
+        return {
+            'status': 'Not initialized',
+            'generation': 0,
+            'weights': None,
+            'fitness': 0
+        }
+    
+    # Get population diversity
+    if _GA_POPULATION:
+        avg_fitness = sum(c.fitness for c in _GA_POPULATION) / len(_GA_POPULATION)
+        best_pop_fitness = max(c.fitness for c in _GA_POPULATION)
+    else:
+        avg_fitness = 0
+        best_pop_fitness = 0
+    
+    w = _GA_BEST_CHROMOSOME.weights
     return {
-        'strategy': 'Smart Waste-Focused Selection',
-        'approach': 'Customer-Inventory Optimization',
+        'status': 'Evolved',
         'generation': _GA_GENERATION,
-        'description': 'Shows stores customer values + high inventory'
+        'weights': w.copy(),
+        'fitness': _GA_BEST_FITNESS,
+        'population_avg_fitness': avg_fitness,
+        'population_best_fitness': best_pop_fitness,
+        'description': f"Gen {_GA_GENERATION}: "
+                      f"cancel={w['w_cancellation_risk']:.2f}, "
+                      f"spread={w['w_demand_spread']:.2f}, "
+                      f"waste={w['w_waste_risk']:.2f}, "
+                      f"rev={w['w_revenue_potential']:.2f}"
     }
+
 
 def unified_optimization_score_v2(
     stores_df, 
@@ -1897,75 +1397,81 @@ def unified_optimization_score_v2(
     cancellation_penalty_flag=0.0,
     customer_discount=0.0
 ):
+    """
+    UNIFIED OPTIMIZATION V2: Multi-factor ranking with dynamic weights.
+    
+    Combines operational metrics, revenue potential, and customer priority factors.
+    Falls back to inventory_rating_equilibrium for core ranking logic.
+    
+    Args:
+        stores_df: DataFrame with store information
+        n: Number of stores to return
+        current_bags: Dict of {store_id: available_bags}
+        customer_valuations: Optional dict of {store_id: customer_rating}
+        Other args: Optional advanced features (not used in basic mode)
+    
+    Returns:
+        List of top n store IDs
+    """
     available_ids = [sid for sid, bags in current_bags.items() if bags > 0]
     if not available_ids:
         return []
-    # --- SETUP & NORMALIZATION (Skipped for brevity) ---
+    
+    if len(available_ids) <= n:
+        return available_ids
     
     available = stores_df[stores_df['store_id'].isin(available_ids)].copy()
+    max_bags = max(current_bags.get(sid, 1) for sid in available_ids)
     
-    # 1. STORE OPERATIONAL METRIC (NEW)
-    if 'operational_score' in available.columns:
-        # Normalize operational score (e.g., 80/100 -> 0.8)
-        max_op_score = available['operational_score'].max() if available['operational_score'].max() > 0 else 100
-        available['op_norm'] = available['operational_score'] / max_op_score
-    else:
-        # Default to neutral if data is missing
-        available['op_norm'] = 1.0
-
-    # 2. REVENUE METRIC MODIFICATION (Integration of Discounts/Value)
-    max_price = available['price'].max() if 'price' in available.columns else 1.0
-
-    # Effective Price Multiplier: (1 - customer_discount) * price_norm
-    available['effective_price_norm'] = (available['price'] / max_price) * (1.0 - customer_discount)
-    
-    # Revenue Potential (Store's perspective): 
-    # Store quality * Operational Score * (Effective Price)
-    available['revenue_metric'] = (
-        available['op_norm'] * # Only show reliable stores for high revenue
-        available['effective_price_norm'] * # Adjusted for discount (less revenue, but higher conversion)
-        available['inventory_norm'] * available['pref_norm']
+    # Normalize inventory
+    available['inventory_norm'] = available['store_id'].apply(
+        lambda sid: current_bags.get(sid, 0) / max_bags if max_bags > 0 else 0
     )
     
-    # 3. CUSTOMER PRIORITY FACTOR (NEW)
-    # Loyalty Tier Bonus
-    loyalty_multipliers = {
-        'Gold': 1.15,  # 15% rank boost
-        'Silver': 1.05, # 5% rank boost
-        'Standard': 1.0
-    }
-    loyalty_bonus = loyalty_multipliers.get(customer_tier, 1.0)
+    # Normalize rating
+    available['rating_norm'] = available['average_overall_rating'] / 5.0
     
-    # Cancellation Compensation Multiplier
-    # If flag is 1.0 (true), give a significant temporary boost (e.g., 20%)
-    cancellation_boost = 1.0 + (cancellation_penalty_flag * 0.20) 
+    # Normalize preferences if available
+    if customer_valuations:
+        available['pref_norm'] = available['store_id'].apply(
+            lambda sid: customer_valuations.get(sid, 2.5) / 5.0
+        )
+    else:
+        available['pref_norm'] = 0.5  # Neutral preference
     
-    # Combine Customer Priority
-    customer_priority_factor = loyalty_bonus * cancellation_boost
-
-    # --- DYNAMIC WEIGHTING & FINAL SCORE CALCULATION (Modified) ---
-
+    # Price normalization (revenue metric)
+    if 'price' in available.columns:
+        max_price = available['price'].max() if available['price'].max() > 0 else 1.0
+        available['price_norm'] = available['price'] / max_price
+    else:
+        available['price_norm'] = 0.5
+    
+    # Calculate urgency based on inventory (higher inventory = more urgent)
+    available['urgency_score'] = available['inventory_norm']
+    
+    # Revenue metric: price * inventory potential
+    available['revenue_metric'] = available['price_norm'] * available['inventory_norm']
+    
+    # Dynamic weights based on available data
+    W_urgency = 0.30  # Weight for urgency (inventory level)
+    W_revenue = 0.35  # Weight for revenue potential
+    W_pref = 0.35     # Weight for customer preference
+    
+    # Calculate unified score
     def calculate_unified_score(row):
-        # ... Dynamic weight calculation based on time_remaining_h (W_urgency, W_revenue, W_pref) ...
-        
-        # New base score incorporates the Store Operational Metric
         base_score = (
             W_urgency * row['urgency_score'] + 
             W_revenue * row['revenue_metric'] + 
             W_pref * row['pref_norm']
         )
-        
-        # FINAL SCORE = (Base Score * Store Operational Score) * Customer Priority Factor * Fairness Factor
-        final_score = (
-            base_score * row['op_norm'] * # Store's operational reliability is a multiplier
-            customer_priority_factor * # Customer's priority (Cancellation/Loyalty)
-            row['fairness_factor']             # Store's exposure fairness
-        )
+        # Include rating as a quality floor
+        final_score = base_score * (0.5 + 0.5 * row['rating_norm'])
         return final_score
-
+    
     available['unified_score'] = available.apply(calculate_unified_score, axis=1)
-
-    # --- RANKING (Skipped for brevity) ---
+    
+    # Rank by unified score and return top n
+    top_n = available.nlargest(n, 'unified_score')
     return top_n['store_id'].tolist()
 
 
@@ -2844,50 +2350,19 @@ def _haversine_distance(coord1: Tuple[float, float], coord2: Tuple[float, float]
 
 ALGORITHMS = {
     'Greedy Baseline': greedy_baseline,
-    'Inventory Aware': inventory_aware,
-    'Inventory-Rating Equilibrium': inventory_rating_equilibrium,
-    'Underdog Boost': underdog_boost,
-    'Waste Prevention': waste_prevention_threshold,
- 
     'Time Decay Urgency': time_decay_urgency,
     'Supply Demand Equilibrium': supply_demand_equilibrium,
-    # ADVANCED HIGH-PERFORMANCE ALGORITHMS
-    'DP Optimal Visibility': dp_optimal_visibility,
-    'Customer-Aware Demand': customer_aware_demand_prediction,
-    'Constraint Backtracking': constraint_backtracking_fairness,
     # PERSONALIZED ALGORITHMS - Show different stores to different customers!
-    'Personalized Top-K': personalized_top_k,
-    'Personalized Waste-Aware': personalized_waste_aware,
-    'Personalized Diverse': personalized_diverse,
-    'Personalized Reliable': personalized_reliable,
-    'Personalized Ultimate': personalized_ultimate,
+    #'Personalized Top-K': personalized_top_k,
+   # 'Personalized Waste-Aware': personalized_waste_aware,
+    #'Personalized Diverse': personalized_diverse,
+    #'Personalized Reliable': personalized_reliable,
+    #'Personalized Ultimate': personalized_ultimate,
     # GENETIC ALGORITHM
     'Genetic Algorithm': genetic_algorithm_ranking,
-    'Unified Optimization V2': unified_optimization_score_v2,
-    'Stochastic Programming': stochastic_programming,
+   # 'Unified Optimization V2': unified_optimization_score_v2,
+    #'Stochastic Programming': stochastic_programming,
 }
-
-def register_accuracy_aware_algorithm(accuracy_tracker, name='Accuracy Aware'):
-    """
-    Register the accuracy-aware algorithm with a specific tracker.
-    
-    Call this function after initializing your AccuracyTracker to add
-    the accuracy-aware algorithm to the registry.
-    
-    Args:
-        accuracy_tracker (AccuracyTracker): Initialized tracker instance
-        name (str): Name for the algorithm in the registry
-        
-    Example:
-        from simulation.accuracy_tracker import AccuracyTracker
-        from simulation.algorithms import register_accuracy_aware_algorithm, ALGORITHMS
-        
-        tracker = AccuracyTracker()
-        register_accuracy_aware_algorithm(tracker)
-        
-        # Now available as ALGORITHMS['Accuracy Aware']
-    """
-    ALGORITHMS[name] = create_accuracy_aware_algorithm(accuracy_tracker)
 
 
 def unregister_algorithm(name):

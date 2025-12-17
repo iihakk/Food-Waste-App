@@ -12,17 +12,30 @@ The simulation follows this daily cycle:
 3. End of day: ACTUAL bags revealed, cancellations if actual < reservations
 4. Revenue/waste calculated based on actual fulfillment
 
+UNIFIED LOST REVENUE DEFINITION:
+================================
+- Unsold bags = Actual bags that weren't sold (waste)
+- Lost Revenue = Unsold bags × Price
+
+Example: Store has 10 actual bags, got 7 reservations
+→ fulfilled=7, unsold=3, lost_revenue = 3 × price
+
+Example: Store has 10 actual bags, got 12 reservations
+→ fulfilled=10, cancelled=2, unsold=0, lost_revenue = 0
+(Cancelled orders are NOT lost revenue - those bags never existed)
+
 Key assumptions:
 - Algorithm and customers only see ESTIMATED bags (not actual)
 - Customers make reservations, not immediate purchases
 - Actual bags revealed at end of day (varies ±30% from estimate)
-- If actual < reservations → some orders cancelled
-- If actual >= reservations → all orders fulfilled, excess = unsold/waste
+- If actual < reservations → some orders cancelled (NOT lost revenue)
+- If actual >= reservations → all orders fulfilled, excess = unsold = waste
 
 Surprise Bag Model:
 - Each fulfilled reservation = 1 bag sold
 - Unsold bags (actual - fulfilled) = waste
 - Revenue = fulfilled_orders × bag_price
+- Lost Revenue = unsold_bags × bag_price
 """
 
 import numpy as np
@@ -32,6 +45,13 @@ from datetime import date, timedelta
 
 from simulation.accuracy_tracker import AccuracyTracker
 from simulation.cancellation_handler import CancellationHandler
+
+# Import GA callbacks for end-of-day evaluation
+try:
+    from simulation.algorithms import ga_start_day, ga_end_day
+    _GA_CALLBACKS_AVAILABLE = True
+except ImportError:
+    _GA_CALLBACKS_AVAILABLE = False
 
 
 class SimulationEngine:
@@ -124,6 +144,10 @@ class SimulationEngine:
                 stats[sid]['estimated_total'] += estimated
                 stats[sid]['actual_total'] += actual
 
+            # Notify GA of day start (for shadow simulation tracking)
+            if _GA_CALLBACKS_AVAILABLE:
+                ga_start_day(daily_estimated, self.stores)
+
             # Algorithm sees ESTIMATED bags (not actual!)
             remaining_estimated = daily_estimated.copy()
 
@@ -189,22 +213,33 @@ class SimulationEngine:
                 reservations = daily_reservations[sid]
                 price = daily_prices[sid]
 
-                # Fulfillment logic
+                # ============================================================
+                # UNIFIED LOST REVENUE LOGIC
+                # ============================================================
+                # Unsold bags = Actual bags that weren't sold (waste)
+                # Lost Revenue = Unsold bags × Price
+                #
+                # Example: Store has 10 actual bags, got 7 reservations
+                # - fulfilled = 7, unsold = 3, lost_revenue = 3 × price
+                #
+                # Example: Store has 10 actual bags, got 12 reservations  
+                # - fulfilled = 10, cancelled = 2, unsold = 0, lost_revenue = 0
+                # (Cancelled orders are NOT lost revenue - those bags never existed)
+                # ============================================================
+                
                 if reservations <= actual:
-                    # All reservations fulfilled
+                    # All reservations fulfilled, excess bags = waste
                     fulfilled = reservations
                     cancelled = 0
-                    unsold = actual - reservations  # Excess = waste
+                    unsold = actual - reservations
                 else:
-                    # Not enough actual bags - some cancelled
+                    # Not enough actual bags - some orders cancelled, NO waste
                     fulfilled = actual
                     cancelled = reservations - actual
-                    unsold = 0  # All actual bags used
+                    unsold = 0
 
                 revenue = fulfilled * price
-                # Lost revenue = revenue lost from unsold/wasted bags
-                # (not from cancellations - those bags didn't exist to sell)
-                lost_revenue = unsold * price
+                lost_revenue = unsold * price  # UNIFIED: Lost Revenue = Unsold × Price
 
                 # Update cumulative stats
                 stats[sid]['reservations'] += reservations
@@ -229,6 +264,10 @@ class SimulationEngine:
 
             # NOTE: Cancelled customers are tracked separately via cancellation_rate
             # Don't add to customers_left to avoid double-counting in satisfaction score
+
+            # Notify GA of day end (for fitness evaluation and evolution)
+            if _GA_CALLBACKS_AVAILABLE:
+                ga_end_day(daily_actual, daily_prices)
 
             daily_data.append({
                 'day': day,

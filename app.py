@@ -20,7 +20,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from simulation.engine import SimulationEngine
-from simulation.algorithms import ALGORITHMS, greedy_baseline
+from simulation.algorithms import ALGORITHMS, greedy_baseline, reset_genetic_algorithm
 from simulation.data_loader import load_data, generate_sample_data
 
 st.set_page_config(
@@ -138,14 +138,6 @@ with st.sidebar:
                           help="Chance a customer shops on any given day")
 
     st.markdown("---")
-    st.markdown("### Advanced Settings")
-
-    use_accuracy = st.checkbox("Use Accuracy Adjustment", value=True,
-                               help="Adjust estimates based on store history")
-    alt_accept_rate = st.slider("Alternative Acceptance Rate", 0.0, 1.0, 0.6,
-                                help="Chance customer accepts alternative when cancelled")
-
-    st.markdown("---")
     st.markdown("### Algorithm")
 
     selected_algos = st.multiselect(
@@ -227,15 +219,16 @@ if run_btn:
         seed = None if randomize else 42
 
         for i, algo_name in enumerate(selected_algos):
+            # Reset GA state before each algorithm run to ensure fair comparison
+            reset_genetic_algorithm()
+            
             algo_func = ALGORITHMS[algo_name]
             run_seed = int(time.time() * 1000) % 100000 if seed is None else seed
             engine = SimulationEngine(stores, customers, seed=run_seed)
             
             start_time = time.time()
             
-            results[algo_name] = engine.run(num_days, n_stores, algo_func, shop_prob,
-                                           use_accuracy_adjustment=use_accuracy,
-                                           alternative_acceptance_rate=alt_accept_rate)
+            results[algo_name] = engine.run(num_days, n_stores, algo_func, shop_prob)
             
             end_time = time.time()
             execution_times[algo_name] = end_time - start_time
@@ -299,43 +292,144 @@ if run_btn:
             st.metric("Fairness Score", f"{summary.get('fairness_score', 0):.1f}/100")
 
     else:
-        # Comparison table for multiple algorithms - sorted by Algorithm Score
-        # WITH WASTE METRICS ADDED
+        # Comparison table for multiple algorithms - sorted by Total Revenue
         comp_data = []
         for algo_name, res in results.items():
             s = res['summary']
             
-            # Calculate total bags (for waste percentage context)
-            total_bags = s.get('total_fulfilled', 0) + s.get('total_unsold', 0) + s.get('total_cancelled', 0)
+            # Get revenue metrics
+            revenue = s.get('total_revenue', 0)
+            lost_revenue = s.get('total_lost_revenue', 0)
+            total_revenue = revenue - lost_revenue  # Net revenue
             
-            # Calculate waste reduction score (inverse of waste rate, higher is better)
+            # Calculate waste rate
             waste_rate = float(s.get('waste_rate', 0))
-            waste_reduction_score = 100 - waste_rate
+            
+            # Get bag counts
+            cancelled = s.get('total_cancelled', 0)
+            unsold = s.get('total_unsold', 0)
+            fulfilled = s.get('total_fulfilled', 0)
+            
+            # Estimate average price per bag from revenue/fulfilled
+            avg_price = revenue / fulfilled if fulfilled > 0 else 5.0
+            
+            # Waste Loss = unsold bags × avg_price
+            waste_loss = unsold * avg_price
             
             comp_data.append({
                 'Algorithm': algo_name,
-                'Score': s.get('algorithm_score', 0),
+                'Revenue': f"{revenue:,.0f}",
+                'Lost Revenue': f"{lost_revenue:,.0f}",
+                'Total Revenue': f"{total_revenue:,.0f}",
+                'Waste Loss': f"{waste_loss:,.0f}",
                 'Fulfilled': s.get('total_fulfilled', 0),
                 'Cancelled': s.get('total_cancelled', 0),
-                'Unsold (Waste)': s.get('total_unsold', 0),  # <-- NEW: Absolute waste
-                'Waste Rate %': waste_rate,  # <-- NEW: Waste percentage
-                'Waste Reduction': f"{waste_reduction_score:.1f}",  # <-- NEW: Inverse metric (higher = better)
-                'Revenue': f"{s['total_revenue']:,.0f}",
-                'RevEff %': s['revenue_efficiency'],
-                'Demand %': s.get('demand_fulfillment', 0),
-                'Cancel %': s.get('cancellation_rate', 0),  # <-- NEW: Cancellation rate
-                'Fairness': s.get('fairness_score', 0),
-                'Runtime (s)': f"{execution_times[algo_name]:.4f}"
+                'Unsold': s.get('total_unsold', 0),
+                'Waste %': f"{waste_rate:.1f}",
+                'Runtime': f"{execution_times[algo_name]:.3f}s"
             })
 
-        comp_df = pd.DataFrame(comp_data).sort_values('Score', ascending=False)
+        comp_df = pd.DataFrame(comp_data)
         
-        # Display the comparison table
+        # Sort by Revenue (need to convert to numeric for sorting)
+        comp_df['_sort_revenue'] = comp_df['Revenue'].str.replace(',', '').astype(float)
+        comp_df = comp_df.sort_values('_sort_revenue', ascending=False).drop('_sort_revenue', axis=1)
+        
+        # Display the comparison table (only selected columns)
         st.markdown("### Algorithm Comparison")
-        st.dataframe(comp_df, use_container_width=True, hide_index=True)
+        display_df = comp_df[['Algorithm', 'Revenue', 'Lost Revenue', 'Total Revenue', 'Unsold', 'Cancelled', 'Runtime']].copy()
+        display_df = display_df.rename(columns={'Unsold': 'Unsold Bags'})
+        st.dataframe(display_df, use_container_width=True, hide_index=True)
         
         # ============================================
-        # NEW: Visual Comparison Charts for Waste
+        # Overall Comparison Chart (Grouped Bar)
+        # ============================================
+        st.markdown("### Overall Algorithm Comparison")
+        
+        # Prepare numeric columns for the comparison chart
+        chart_df = comp_df.copy()
+        chart_df['Revenue_num'] = chart_df['Revenue'].str.replace(',', '').astype(float)
+        chart_df['Lost_Revenue_num'] = chart_df['Lost Revenue'].str.replace(',', '').astype(float)
+        chart_df['Total_Revenue_num'] = chart_df['Total Revenue'].str.replace(',', '').astype(float)
+        chart_df['Waste_Loss_num'] = chart_df['Waste Loss'].str.replace(',', '').astype(float)
+        
+        # Create grouped bar chart comparing key metrics
+        comparison_melted = chart_df.melt(
+            id_vars=['Algorithm'],
+            value_vars=['Revenue_num', 'Lost_Revenue_num', 'Total_Revenue_num'],
+            var_name='Metric',
+            value_name='Value'
+        )
+        comparison_melted['Metric'] = comparison_melted['Metric'].map({
+            'Revenue_num': 'Revenue',
+            'Lost_Revenue_num': 'Lost Revenue',
+            'Total_Revenue_num': 'Total Revenue'
+        })
+        
+        fig_comparison = px.bar(
+            comparison_melted,
+            x='Algorithm',
+            y='Value',
+            color='Metric',
+            barmode='group',
+            title='Revenue Metrics Comparison by Algorithm',
+            color_discrete_sequence=[COLORS[0], COLORS[3], COLORS[4]]
+        )
+        fig_comparison.update_layout(
+            plot_bgcolor='rgba(0,0,0,0)',
+            paper_bgcolor='rgba(0,0,0,0)',
+            legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='right', x=1),
+            yaxis_title='Amount (EGP)'
+        )
+        st.plotly_chart(fig_comparison, use_container_width=True)
+        
+        # ============================================
+        # Revenue Comparison Charts
+        # ============================================
+        st.markdown("### Revenue Comparison")
+        
+        rev_col1, rev_col2 = st.columns(2)
+        
+        with rev_col1:
+            # Bar chart: Total Revenue (Net) per algorithm
+            fig_rev = px.bar(
+                chart_df, 
+                x='Algorithm', 
+                y='Total_Revenue_num',
+                title='Total Revenue (Revenue - Lost) by Algorithm',
+                color='Total_Revenue_num',
+                color_continuous_scale='Greens'
+            )
+            fig_rev.update_layout(
+                plot_bgcolor='rgba(0,0,0,0)',
+                paper_bgcolor='rgba(0,0,0,0)',
+                showlegend=False,
+                coloraxis_showscale=False,
+                yaxis_title='Total Revenue (EGP)'
+            )
+            st.plotly_chart(fig_rev, use_container_width=True)
+        
+        with rev_col2:
+            # Bar chart: Waste Loss by algorithm
+            fig_waste_loss = px.bar(
+                chart_df, 
+                x='Algorithm', 
+                y='Waste_Loss_num',
+                title='Waste Loss (EGP) by Algorithm',
+                color='Waste_Loss_num',
+                color_continuous_scale='Reds'
+            )
+            fig_waste_loss.update_layout(
+                plot_bgcolor='rgba(0,0,0,0)',
+                paper_bgcolor='rgba(0,0,0,0)',
+                showlegend=False,
+                coloraxis_showscale=False,
+                yaxis_title='Waste Loss (EGP)'
+            )
+            st.plotly_chart(fig_waste_loss, use_container_width=True)
+        
+        # ============================================
+        # Waste Comparison
         # ============================================
         st.markdown("### Waste Comparison")
         
@@ -344,11 +438,11 @@ if run_btn:
         with waste_col1:
             # Bar chart: Absolute waste per algorithm
             fig_waste_abs = px.bar(
-                comp_df, 
+                chart_df, 
                 x='Algorithm', 
-                y='Unsold (Waste)',
+                y='Unsold',
                 title='Unsold Bags (Waste) by Algorithm',
-                color='Unsold (Waste)',
+                color='Unsold',
                 color_continuous_scale='Reds'
             )
             fig_waste_abs.update_layout(
@@ -360,99 +454,51 @@ if run_btn:
             st.plotly_chart(fig_waste_abs, use_container_width=True)
         
         with waste_col2:
-            # Bar chart: Waste rate percentage
-            fig_waste_rate = px.bar(
-                comp_df, 
+            # Bar chart: Waste Rate % per algorithm
+            chart_df['Waste_pct'] = chart_df['Waste %'].str.replace('%', '').astype(float)
+            fig_waste_pct = px.bar(
+                chart_df, 
                 x='Algorithm', 
-                y='Waste Rate %',
+                y='Waste_pct',
                 title='Waste Rate (%) by Algorithm',
-                color='Waste Rate %',
-                color_continuous_scale='RdYlGn_r'  # Red = high waste (bad), Green = low waste (good)
+                color='Waste_pct',
+                color_continuous_scale='RdYlGn_r'
             )
-            fig_waste_rate.update_layout(
+            fig_waste_pct.update_layout(
                 plot_bgcolor='rgba(0,0,0,0)',
                 paper_bgcolor='rgba(0,0,0,0)',
                 showlegend=False,
                 coloraxis_showscale=False
             )
-            st.plotly_chart(fig_waste_rate, use_container_width=True)
+            st.plotly_chart(fig_waste_pct, use_container_width=True)
         
         # ============================================
-        # NEW: Comprehensive Comparison Radar Chart
-        # ============================================
-        st.markdown("### Multi-Metric Radar Comparison")
-        
-        # Prepare data for radar chart
-        radar_metrics = ['Score', 'Demand %', 'RevEff %', 'Fairness']
-        
-        # Add Waste Reduction as a positive metric (100 - waste_rate)
-        radar_df = comp_df.copy()
-        radar_df['Waste Reduction %'] = 100 - radar_df['Waste Rate %']
-        radar_metrics.append('Waste Reduction %')
-        
-        # Also add inverse of cancellation rate
-        radar_df['Fulfillment %'] = 100 - radar_df['Cancel %']
-        radar_metrics.append('Fulfillment %')
-        
-        fig_radar = go.Figure()
-        
-        for i, algo in enumerate(radar_df['Algorithm']):
-            row = radar_df[radar_df['Algorithm'] == algo].iloc[0]
-            values = [row[m] for m in radar_metrics]
-            values.append(values[0])  # Close the polygon
-            
-            fig_radar.add_trace(go.Scatterpolar(
-                r=values,
-                theta=radar_metrics + [radar_metrics[0]],
-                fill='toself',
-                name=algo,
-                line_color=COLORS[i % len(COLORS)],
-                opacity=0.7
-            ))
-        
-        fig_radar.update_layout(
-            polar=dict(
-                radialaxis=dict(
-                    visible=True,
-                    range=[0, 100]
-                )
-            ),
-            showlegend=True,
-            title="Algorithm Performance Across All Metrics",
-            plot_bgcolor='rgba(0,0,0,0)',
-            paper_bgcolor='rgba(0,0,0,0)'
-        )
-        st.plotly_chart(fig_radar, use_container_width=True)
-        
-        # ============================================
-        # NEW: Best/Worst Highlights
+        # Performance Highlights
         # ============================================
         st.markdown("### Performance Highlights")
         
         highlight_col1, highlight_col2, highlight_col3 = st.columns(3)
         
         with highlight_col1:
-            # Best waste reduction
-            best_waste_idx = comp_df['Waste Rate %'].idxmin()
-            best_waste_algo = comp_df.loc[best_waste_idx, 'Algorithm']
-            best_waste_rate = comp_df.loc[best_waste_idx, 'Waste Rate %']
-            st.success(f"🏆 **Lowest Waste Rate**\n\n{best_waste_algo}\n\n{best_waste_rate:.1f}%")
+            # Best total revenue
+            best_rev_idx = chart_df['Total_Revenue_num'].idxmax()
+            best_rev_algo = chart_df.loc[best_rev_idx, 'Algorithm']
+            best_rev = chart_df.loc[best_rev_idx, 'Total Revenue']
+            st.success(f"💰 **Highest Total Revenue**\n\n{best_rev_algo}\n\n{best_rev} EGP")
         
         with highlight_col2:
-            # Best revenue
-            # Need to convert revenue back to number for comparison
-            comp_df['Revenue_num'] = comp_df['Revenue'].str.replace(',', '').astype(float)
-            best_rev_idx = comp_df['Revenue_num'].idxmax()
-            best_rev_algo = comp_df.loc[best_rev_idx, 'Algorithm']
-            best_rev = comp_df.loc[best_rev_idx, 'Revenue']
-            st.success(f"💰 **Highest Revenue**\n\n{best_rev_algo}\n\n{best_rev} EGP")
+            # Lowest lost revenue
+            best_loss_idx = chart_df['Lost_Revenue_num'].idxmin()
+            best_loss_algo = chart_df.loc[best_loss_idx, 'Algorithm']
+            best_loss = chart_df.loc[best_loss_idx, 'Lost Revenue']
+            st.success(f"� **Lowest Lost Revenue**\n\n{best_loss_algo}\n\n{best_loss} EGP")
         
         with highlight_col3:
-            # Best overall score
-            best_score_idx = comp_df['Score'].idxmax()
-            best_score_algo = comp_df.loc[best_score_idx, 'Algorithm']
-            best_score = comp_df.loc[best_score_idx, 'Score']
-            st.success(f"⭐ **Best Overall Score**\n\n{best_score_algo}\n\n{best_score:.1f}/100")
+            # Lowest waste
+            best_waste_idx = chart_df['Unsold'].idxmin()
+            best_waste_algo = chart_df.loc[best_waste_idx, 'Algorithm']
+            best_waste = chart_df.loc[best_waste_idx, 'Unsold']
+            st.success(f"🏆 **Lowest Waste**\n\n{best_waste_algo}\n\n{best_waste} bags")
 
     # Charts
     st.markdown("## Analysis")
