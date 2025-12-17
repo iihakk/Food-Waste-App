@@ -77,6 +77,30 @@ class SimulationEngine:
         self.customers = customers_df.copy()
         self.seed = seed
 
+    def _haversine_distance(self, coord1, coord2):
+        """
+        Calculate distance between two lat/lon coordinates in km.
+
+        Args:
+            coord1: (latitude, longitude) tuple
+            coord2: (latitude, longitude) tuple
+
+        Returns:
+            Distance in kilometers
+        """
+        R = 6371  # Earth radius in km
+
+        lat1, lon1 = np.radians(coord1[0]), np.radians(coord1[1])
+        lat2, lon2 = np.radians(coord2[0]), np.radians(coord2[1])
+
+        dlat = lat2 - lat1
+        dlon = lon2 - lon1
+
+        a = np.sin(dlat/2)**2 + np.cos(lat1) * np.cos(lat2) * np.sin(dlon/2)**2
+        c = 2 * np.arcsin(np.sqrt(a))
+
+        return R * c
+
     def run(self, num_days, n_stores, ranking_func, shopping_probability=0.7,
             use_accuracy_adjustment=True, alternative_acceptance_rate=0.6):
         """
@@ -164,6 +188,11 @@ class SimulationEngine:
                 total_customers += 1
                 cust_id = cust['customer_id']
 
+                # Extract customer location (for distance-aware algorithms)
+                customer_location = None
+                if 'latitude' in cust and 'longitude' in cust:
+                    customer_location = (cust['latitude'], cust['longitude'])
+
                 # Build customer valuations FIRST (needed for personalized algorithms)
                 customer_valuations = {}
                 for sid in store_ids:
@@ -171,10 +200,11 @@ class SimulationEngine:
                     if col in self.customers.columns:
                         customer_valuations[sid] = cust[col]
 
-                # Algorithm sees remaining ESTIMATES + customer preferences (optional)
-                # Personalized algorithms can use customer_valuations to customize ranking
+                # Algorithm sees remaining ESTIMATES + customer preferences + location
+                # Location-aware algorithms can use customer_location for distance-based ranking
                 displayed = ranking_func(self.stores, n_stores, remaining_estimated,
-                                        customer_valuations=customer_valuations)
+                                        customer_valuations=customer_valuations,
+                                        customer_location=customer_location)
 
                 # Track exposures
                 for sid in displayed:
@@ -186,13 +216,30 @@ class SimulationEngine:
                     continue
 
                 # Customer picks best store from displayed options
+                # Factor in both valuation AND distance (closer stores preferred)
                 best_store = None
-                best_val = 0
+                best_score = -1
                 for sid in displayed:
                     val = customer_valuations.get(sid, 0)
-                    if val > best_val and remaining_estimated.get(sid, 0) > 0:
-                        best_val = val
-                        best_store = sid
+                    if remaining_estimated.get(sid, 0) > 0:
+                        # Calculate distance factor if location available
+                        distance_factor = 1.0
+                        if customer_location:
+                            store_row = self.stores[self.stores['store_id'] == sid].iloc[0]
+                            if 'latitude' in store_row and 'longitude' in store_row:
+                                dist = self._haversine_distance(
+                                    customer_location,
+                                    (store_row['latitude'], store_row['longitude'])
+                                )
+                                # Closer stores get higher factor (decay over distance)
+                                # At 0km: factor=1.0, at 5km: factor~0.37, at 10km: factor~0.14
+                                distance_factor = np.exp(-dist / 5.0)
+
+                        # Combined score: valuation * distance_factor
+                        score = val * (0.7 + 0.3 * distance_factor)
+                        if score > best_score:
+                            best_score = score
+                            best_store = sid
 
                 # Customer makes RESERVATION (not purchase yet)
                 if best_store and remaining_estimated.get(best_store, 0) > 0:

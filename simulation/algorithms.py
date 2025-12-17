@@ -25,26 +25,93 @@ from typing import Optional, Dict, List, Tuple
 import pandas as pd
 
 
-def greedy_baseline(stores_df, n, current_bags, customer_valuations=None):
+# =============================================================================
+# DISTANCE CONFIGURATION AND HELPER
+# =============================================================================
+# Distance weight: how much location affects ranking (0.0 = ignore, 1.0 = very important)
+DISTANCE_WEIGHT = 0.3  # 30% weight for distance factor
 
+def _calculate_distance_factor(customer_location, store_row, decay_km=5.0):
+    """
+    Calculate distance factor between customer and store.
+
+    Args:
+        customer_location: (latitude, longitude) tuple or None
+        store_row: DataFrame row with store data
+        decay_km: Distance at which factor drops to ~37% (default 5km)
+
+    Returns:
+        Factor between 0 and 1 (1 = very close, 0 = very far)
+    """
+    if customer_location is None:
+        return 1.0  # No location data, no penalty
+
+    if 'latitude' not in store_row or 'longitude' not in store_row:
+        return 1.0
+
+    # Haversine distance calculation
+    R = 6371  # Earth radius in km
+
+    lat1, lon1 = np.radians(customer_location[0]), np.radians(customer_location[1])
+    lat2, lon2 = np.radians(store_row['latitude']), np.radians(store_row['longitude'])
+
+    dlat = lat2 - lat1
+    dlon = lon2 - lon1
+
+    a = np.sin(dlat/2)**2 + np.cos(lat1) * np.cos(lat2) * np.sin(dlon/2)**2
+    c = 2 * np.arcsin(np.sqrt(a))
+    dist = R * c
+
+    # Exponential decay: closer = higher factor
+    # At 0km: 1.0, at 5km: ~0.37, at 10km: ~0.14
+    return np.exp(-dist / decay_km)
+
+
+def greedy_baseline(stores_df, n, current_bags, customer_valuations=None, customer_location=None):
+    """
+    BASELINE ALGORITHM: Greedy by Rating with Distance Factor
+
+    Strategy: Show highest-rated stores, with distance penalty for far stores.
+    """
     # Filter to stores with available bags
     available_ids = [sid for sid, bags in current_bags.items() if bags > 0]
     available = stores_df[stores_df['store_id'].isin(available_ids)]
 
-    # Sort by rating (descending) and take top n
-    top_n = available.nlargest(n, 'average_overall_rating')
-    return top_n['store_id'].tolist()
+    if available.empty:
+        return []
+
+    # Calculate score: rating * distance_factor
+    scores = []
+    for _, row in available.iterrows():
+        sid = row['store_id']
+        rating = row['average_overall_rating']
+
+        # Distance factor (1.0 if no location, otherwise decays with distance)
+        dist_factor = _calculate_distance_factor(customer_location, row)
+
+        # Combined score: rating with distance penalty
+        # DISTANCE_WEIGHT controls how much distance matters
+        score = rating * (1 - DISTANCE_WEIGHT + DISTANCE_WEIGHT * dist_factor)
+        scores.append((sid, score))
+
+    # Sort by score descending and take top n
+    scores.sort(key=lambda x: x[1], reverse=True)
+    return [sid for sid, _ in scores[:n]]
 
 
-def supply_demand_equilibrium(stores_df, n, current_bags, customer_valuations=None, demand_forecast=None):
+def supply_demand_equilibrium(stores_df, n, current_bags, customer_valuations=None,
+                               demand_forecast=None, customer_location=None):
     """
-    SMART EQUILIBRIUM + REVENUE BOOST
-    
-    Additions:
-    - PRICE FACTOR: Prioritizes higher-value bags to boost Total Revenue KPI.
-    
+    SMART EQUILIBRIUM + REVENUE BOOST + DISTANCE AWARENESS
+
+    Factors:
+    - RATING: Customer preference/store quality
+    - SUPPLY: Inventory urgency (waste prevention)
+    - PRICE: Revenue optimization
+    - DISTANCE: Prefer nearby stores for customers
+
     Formula:
-        Score = (Rating) * (1 + 0.5*Supply) * (1 + 0.3*Price) * Jitter
+        Score = (Rating) * (1 + 0.5*Supply) * (1 + 0.3*Price) * DistanceFactor
     """
     # 1. Filter to stores with available bags
     available_ids = [sid for sid, bags in current_bags.items() if bags > 0]
@@ -56,8 +123,8 @@ def supply_demand_equilibrium(stores_df, n, current_bags, customer_valuations=No
     # 2. Pre-calculate Normalization Factors
     max_bags = max([current_bags[sid] for sid in available_ids]) if available_ids else 1
     log_max_bags = math.log1p(max_bags)
-    
-    # NEW: Find max price for normalization
+
+    # Find max price for normalization
     max_price = available['price'].max() if not available.empty else 1
 
     scores = []
@@ -74,18 +141,17 @@ def supply_demand_equilibrium(stores_df, n, current_bags, customer_valuations=No
 
         # B. SUPPLY URGENCY (Waste KPI)
         supply_index = math.log1p(inventory) / log_max_bags if log_max_bags > 0 else 0
-        
-        # C. PRICE BOOST (Revenue KPI) -- NEW!
-        # Normalizes price 0.0 to 1.0. 
-        # Higher price = Higher score = More visibility = Higher Revenue.
+
+        # C. PRICE BOOST (Revenue KPI)
         price_index = price / max_price if max_price > 0 else 0
 
-        # FINAL SCORE
-        # We add a 30% weight (0.3) to price. 
-        # It's less important than Rating/Supply, but enough to break ties 
-        # in favor of money.
-        score = base_rating * (1.0 + (0.5 * supply_index)) * (1.0 + (0.3 * price_index))
-        
+        # D. DISTANCE FACTOR (Location KPI) - NEW!
+        dist_factor = _calculate_distance_factor(customer_location, row)
+
+        # FINAL SCORE with distance penalty
+        base_score = base_rating * (1.0 + (0.5 * supply_index)) * (1.0 + (0.3 * price_index))
+        score = base_score * (1 - DISTANCE_WEIGHT + DISTANCE_WEIGHT * dist_factor)
+
         scores.append((sid, score))
 
     scores.sort(key=lambda x: x[1], reverse=True)
@@ -93,26 +159,31 @@ def supply_demand_equilibrium(stores_df, n, current_bags, customer_valuations=No
 
 
 
-def time_decay_urgency(stores_df, n, current_bags, closing_times=None, current_time=None, 
+def time_decay_urgency(stores_df, n, current_bags, closing_times=None, current_time=None,
                        customer_valuations=None, exposure_history=None, customer_id=None,
-                       waste_prevention_mode='balanced'):  # NEW PARAMETER
+                       waste_prevention_mode='balanced', customer_location=None):
     """
-    Enhanced with aggressive waste prevention strategies.
-    
+    Enhanced with aggressive waste prevention strategies and distance awareness.
+
     waste_prevention_mode options:
     - 'aggressive': Maximum waste reduction (70% urgency focus)
     - 'balanced': Current approach (40% urgency in moderate phase)
     - 'light': Customer preference heavy (20% urgency)
     """
-    
+
     available_ids = [sid for sid, bags in current_bags.items() if bags > 0]
     if not available_ids:
         return []
-    
+
     if len(available_ids) <= n:
         return available_ids
-    
+
     available = stores_df[stores_df['store_id'].isin(available_ids)].copy()
+
+    # Calculate distance factor for each store
+    available['distance_factor'] = available.apply(
+        lambda row: _calculate_distance_factor(customer_location, row), axis=1
+    )
     
     # Initialize time
     if current_time is None:
@@ -305,7 +376,13 @@ def time_decay_urgency(stores_df, n, current_bags, closing_times=None, current_t
                 )
     
     available['personalized_score'] = available.apply(calculate_waste_optimized_score, axis=1)
-    
+
+    # Apply distance factor to personalized score
+    available['personalized_score'] = (
+        available['personalized_score'] *
+        (1 - DISTANCE_WEIGHT + DISTANCE_WEIGHT * available['distance_factor'])
+    )
+
     # === PHASE 5: WASTE-OPTIMIZED SLOT ALLOCATION ===
     
     critical_stores = available[available['urgency_phase'] == 'critical'].copy()
@@ -1027,46 +1104,52 @@ def _evaluate_selection(selected_stores, current_bags, customer_valuations, stor
     return fitness / len(selected_stores)
 
 
-def _apply_chromosome_ranking(chromosome, stores_df, n, current_bags, customer_valuations):
+def _apply_chromosome_ranking(chromosome, stores_df, n, current_bags, customer_valuations,
+                               customer_location=None):
     """
     Rank stores using MULTIPLICATIVE scoring (EXACTLY like supply_demand_equilibrium).
-    
-    Formula: Score = base_rating * (1 + w_inventory*supply_index) * (1 + w_match*price_index)
-    
+
+    Formula: Score = base_rating * (1 + w_inventory*supply_index) * (1 + w_match*price_index) * distance_factor
+
     When w_inventory=0.5 and w_match=0.3, this is IDENTICAL to supply_demand_equilibrium.
     """
     available_ids = [sid for sid, bags in current_bags.items() if bags > 0]
     if not available_ids:
         return []
-    
+
     if len(available_ids) <= n:
         return available_ids
-    
+
     available = stores_df[stores_df['store_id'].isin(available_ids)].copy()
-    
+
     max_bags = max(current_bags.get(sid, 1) for sid in available_ids)
     log_max_bags = math.log1p(max_bags)
     max_price = available['price'].max() if not available.empty else 1
-    
+
     w = chromosome.weights
-    
+
     scores = []
     for _, row in available.iterrows():
         sid = row['store_id']
         inventory = current_bags.get(sid, 0)
         price = row.get('price', 5.0)
-        
+
         if customer_valuations and sid in customer_valuations:
             base_rating = customer_valuations[sid]
         else:
             base_rating = row['average_overall_rating']
-        
+
         supply_index = math.log1p(inventory) / log_max_bags if log_max_bags > 0 else 0
         price_index = price / max_price if max_price > 0 else 0
-        
-        score = base_rating * (1.0 + w['w_inventory_urgency'] * supply_index) * (1.0 + w['w_customer_match'] * price_index)
+
+        # Distance factor
+        dist_factor = _calculate_distance_factor(customer_location, row)
+
+        # Score with distance penalty
+        base_score = base_rating * (1.0 + w['w_inventory_urgency'] * supply_index) * (1.0 + w['w_customer_match'] * price_index)
+        score = base_score * (1 - DISTANCE_WEIGHT + DISTANCE_WEIGHT * dist_factor)
         scores.append((sid, score))
-    
+
     scores.sort(key=lambda x: x[1], reverse=True)
     return [sid for sid, _ in scores[:n]]
 
@@ -1321,40 +1404,42 @@ def _compute_chromosome_fitness(chromosome, actual_bags, prices):
     return fitness
 
 
-def genetic_algorithm_ranking(stores_df, n, current_bags, customer_valuations=None):
+def genetic_algorithm_ranking(stores_df, n, current_bags, customer_valuations=None,
+                               customer_location=None):
     """
-    GENETIC ALGORITHM with End-of-Day Evaluation.
-    
+    GENETIC ALGORITHM with End-of-Day Evaluation and Distance Awareness.
+
     ARCHITECTURE:
     1. Active chromosome (initially supply_demand_equilibrium) makes REAL decisions
     2. All chromosomes track shadow selections in background
     3. At end of day: evaluate what each chromosome WOULD have produced
     4. If a background chromosome did better, swap it to become active
     5. Evolve population
-    
+
     This ensures:
     - We START at supply_demand_equilibrium performance (never worse)
     - We can only IMPROVE as GA finds better weights
     """
     global _GA_POPULATION, _GA_ACTIVE_CHROMOSOME_IDX
-    
+
     # Initialize on first call
     if _GA_POPULATION is None:
         _initialize_population()
-    
+
     available_ids = [sid for sid, bags in current_bags.items() if bags > 0]
     if not available_ids:
         return []
-    
+
     if len(available_ids) <= n:
         return available_ids
-    
+
     # Track this customer for shadow simulation
     ga_track_customer(n, customer_valuations)
-    
-    # Use ACTIVE chromosome for actual ranking
+
+    # Use ACTIVE chromosome for actual ranking (with distance awareness)
     active_chromosome = _GA_POPULATION[_GA_ACTIVE_CHROMOSOME_IDX]
-    return _apply_chromosome_ranking(active_chromosome, stores_df, n, current_bags, customer_valuations)
+    return _apply_chromosome_ranking(active_chromosome, stores_df, n, current_bags,
+                                      customer_valuations, customer_location)
 
 
 def reset_genetic_algorithm():
