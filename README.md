@@ -1,5 +1,6 @@
 
-## Folder Contents
+
+## 📁 Folder Contents
 
 * **Report.pdf**
   A detailed 5-page report covering the system description, GA strategy justification, objectives, data generation, and results interpretation.
@@ -8,7 +9,8 @@
   A documented Google Colab notebook containing the full implementation, experimental trials, and evolutionary history of the algorithm.
 
 * **simulation_data.csv**
-  The final generated dataset used for testing, including synthetic store and customer data across Cairo districts.
+  A **sample dataset** used for testing and reproducibility.
+  ⚠️ *Note:* Actual simulation data is **randomly generated at every run** using `data_loader.py`, producing new synthetic store and customer data each time the simulator is executed.
 
 * **Wednesday_Presentation.pdf**
   Presentation slides delivered on **Wednesday, December 17**.
@@ -18,7 +20,7 @@
 
 ---
 
-##  Live Links & Dashboard
+## 🚀 Live Links & Dashboard
 
 * **Deployed Simulator:**
   [https://food-waste-app-optimizers.streamlit.app/](https://food-waste-app-optimizers.streamlit.app/)
@@ -27,11 +29,11 @@
   [https://github.com/iihakk/Food-Waste-App](https://github.com/iihakk/Food-Waste-App)
 
 * **Work Distribution Sheet:**
-[  Link to Google Sheet](https://docs.google.com/spreadsheets/d/1EeD7nl-IQvhsigRVCwADQcfyBIwRhoH9M1pGHOA5CRQ/edit?gid=0#gid=0)
+  Link to Google Sheet
 
 ---
 
-##  Installation and Running Locally
+## 🛠️ Installation and Running Locally
 
 To run the simulation dashboard locally:
 
@@ -56,10 +58,12 @@ To run the simulation dashboard locally:
 
 ---
 
-## Authors
+## 👥 Authors
 
 * Salma Elmarakby
 * Nour Elghaly
 * Yassin Shamaa
 * Abdulaziz Al-haidary
+
+---
 
