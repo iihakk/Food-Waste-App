@@ -1,6 +1,3 @@
-Here’s a clean, **README-ready** reorganization you can paste directly:
-
----
 
 ## Folder Contents
 
@@ -66,6 +63,3 @@ To run the simulation dashboard locally:
 * Yassin Shamaa
 * Abdulaziz Al-haidary
 
----
-
-If you want, I can also **tighten the language**, **add an abstract**, or **make it more GitHub-polished** (badges, screenshots, or citations).
