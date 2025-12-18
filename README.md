@@ -30,7 +30,7 @@ Here’s a clean, **README-ready** reorganization you can paste directly:
   [https://github.com/iihakk/Food-Waste-App](https://github.com/iihakk/Food-Waste-App)
 
 * **Work Distribution Sheet:**
-  Link to Google Sheet
+[  Link to Google Sheet](https://docs.google.com/spreadsheets/d/1EeD7nl-IQvhsigRVCwADQcfyBIwRhoH9M1pGHOA5CRQ/edit?gid=0#gid=0)
 
 ---
 
