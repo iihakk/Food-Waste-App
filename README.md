@@ -1,6 +1,6 @@
 
 
-## 📁 Folder Contents
+## Folder Contents
 
 * **Report.pdf**
   A detailed 5-page report covering the system description, GA strategy justification, objectives, data generation, and results interpretation.
@@ -20,7 +20,7 @@
 
 ---
 
-## 🚀 Live Links & Dashboard
+## Live Links & Dashboard
 
 * **Deployed Simulator:**
   [https://food-waste-app-optimizers.streamlit.app/](https://food-waste-app-optimizers.streamlit.app/)
@@ -33,7 +33,7 @@
 
 ---
 
-## 🛠️ Installation and Running Locally
+## Installation and Running Locally
 
 To run the simulation dashboard locally:
 
@@ -58,7 +58,7 @@ To run the simulation dashboard locally:
 
 ---
 
-## 👥 Authors
+## Authors
 
 * Salma Elmarakby
 * Nour Elghaly
