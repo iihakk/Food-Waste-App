@@ -58,3 +58,8 @@ ENV/
 
 # Local data (if sensitive)
 # data/
+
+# IDE caches
+.vs/
+__pycache__/
+*.pyc
